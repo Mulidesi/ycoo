@@ -1,0 +1,76 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ycoo_client/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'ycoo_client/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build release APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ycoo_client
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter 3.24.5
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+
+      - name: Versions
+        run: |
+          flutter --version
+          java -version
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Static analysis
+        run: flutter analyze
+
+      # 只跑离线测试：live_image_test 依赖线上图片，CI 里不稳定
+      - name: Offline tests
+        run: flutter test test/paid_thread_test.dart test/link_resolver_test.dart
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Rename artifact
+        run: |
+          cd build/app/outputs/flutter-apk
+          ls -lh
+          cp app-release.apk "ycoo-client-$(date +%Y%m%d)-${{ github.run_number }}.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ycoo-client-apk
+          path: ycoo_client/build/app/outputs/flutter-apk/ycoo-client-*.apk
+          if-no-files-found: error
+          retention-days: 30
