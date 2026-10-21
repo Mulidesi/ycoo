@@ -1,0 +1,29 @@
+name: ycoo_client
+description: "源论坛 ycoo.net 多端客户端"
+publish_to: 'none'
+version: 1.0.9+10
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  html: ^0.15.4
+  shared_preferences: ^2.3.2
+  provider: ^6.1.2
+  url_launcher: ^6.3.1
+  path_provider: ^2.1.4
+  # 1.8+ 的 Kotlin DSL 构建脚本要求更新的 Gradle/Kotlin，与 Flutter 3.24.5 模板不兼容，锁 1.7.0
+  dynamic_color: 1.7.0
+  workmanager: ^0.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

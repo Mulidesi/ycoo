@@ -1,0 +1,36 @@
+# --- 抓包/分析产物（含登录会话 cookie，绝不入库）---
+/recon/
+
+# --- 构建与发布产物 ---
+/ycoo_client/build/
+/ycoo_client/dist/
+/ycoo_client/.dart_tool/
+/ycoo_client/.flutter-plugins
+/ycoo_client/.flutter-plugins-dependencies
+/ycoo_client/android/.gradle/
+/ycoo_client/android/local.properties
+/ycoo_client/android/key.properties
+/ycoo_client/**/*.keystore
+/ycoo_client/**/*.jks
+/ycoo_client/ios/Pods/
+/ycoo_client/ios/.symlinks/
+/ycoo_client/ios/Flutter/Flutter.framework
+/ycoo_client/ios/Flutter/Flutter.podspec
+/ycoo_client/ios/Flutter/Generated.xcconfig
+/ycoo_client/ios/Flutter/flutter_export_environment.sh
+/ycoo_client/macos/Pods/
+/ycoo_client/macos/Flutter/ephemeral/
+/ycoo_client/windows/flutter/ephemeral/
+/ycoo_client/linux/flutter/ephemeral/
+
+# --- IDE / 系统 ---
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+
+# --- 本地助手数据 ---
+.workbuddy-ai/

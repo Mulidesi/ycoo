@@ -1,0 +1,270 @@
+/// 数据模型：全部来自 Discuz! 页面解析结果，不依赖任何第三方序列化库。
+library;
+
+class Board {
+  final int fid;
+  final String name;
+  final String? icon;
+  final int todayPosts;
+  final int threads;
+  final int posts;
+  final String? lastPost;
+  final bool isPrivate;
+
+  const Board({
+    required this.fid,
+    required this.name,
+    this.icon,
+    this.todayPosts = 0,
+    this.threads = 0,
+    this.posts = 0,
+    this.lastPost,
+    this.isPrivate = false,
+  });
+}
+
+class BoardGroup {
+  final int gid;
+  final String name;
+  final List<Board> boards;
+
+  const BoardGroup({required this.gid, required this.name, required this.boards});
+}
+
+class ThreadItem {
+  final int tid;
+  final String title;
+  final String url;
+  final String? author;
+  final int? authorId;
+  final String? avatar;
+  final int replies;
+  final int views;
+  final String? timeText;
+  final String? typeName;
+  final bool hasAttachment;
+  final bool isSticky;
+  final int? fid;
+
+  const ThreadItem({
+    required this.tid,
+    required this.title,
+    required this.url,
+    this.author,
+    this.authorId,
+    this.avatar,
+    this.replies = 0,
+    this.views = 0,
+    this.timeText,
+    this.typeName,
+    this.hasAttachment = false,
+    this.isSticky = false,
+    this.fid,
+  });
+}
+
+class ThreadPage {
+  final List<ThreadItem> items;
+  final int page;
+  final int totalPages;
+
+  const ThreadPage({required this.items, required this.page, required this.totalPages});
+
+  bool get hasMore => page < totalPages;
+}
+
+/// 帖子附件（非图片的文件附件；图片已并入正文渲染）。
+class PostAttachment {
+  final String name;
+
+  /// 形如 `148.78 KB` 的原始大小文本。
+  final String? sizeText;
+
+  /// 下载链接（forum.php?mod=attachment&aid=…&nothumb=yes 的绝对地址）。
+  final String url;
+
+  const PostAttachment({required this.name, this.sizeText, required this.url});
+
+  String get key => url;
+}
+
+class Post {
+  final int pid;
+  final String author;
+  final int? authorId;
+  final String? avatar;
+  final String? floor;
+  final String? timeText;
+  final String contentHtml;
+  final bool isOp;
+  final List<PostAttachment> attachments;
+
+  const Post({
+    required this.pid,
+    required this.author,
+    this.authorId,
+    this.avatar,
+    this.floor,
+    this.timeText,
+    required this.contentHtml,
+    this.isOp = false,
+    this.attachments = const <PostAttachment>[],
+  });
+}
+
+class ThreadDetail {
+  final int tid;
+  final int fid;
+  final String title;
+  final List<Post> posts;
+  final int page;
+  final int totalPages;
+  final String? lockedText;
+  final bool needsReply;
+  final bool needsPurchase;
+  final bool needsLogin;
+  final bool isLocked;
+
+  /// 购买主题弹窗链接（forum.php?mod=misc&action=pay&tid=…&pid=…），
+  /// 仅付费主题的楼主楼存在；应用内购买据此发起。
+  final String? payUrl;
+
+  /// 价格文本，如 `5 星币`。
+  final String? payPriceText;
+
+  /// 已购买人数（页面显示 `已有 N 人购买`）。
+  final int payBuyers;
+
+  const ThreadDetail({
+    required this.tid,
+    required this.fid,
+    required this.title,
+    required this.posts,
+    this.page = 1,
+    this.totalPages = 1,
+    this.lockedText,
+    this.needsReply = false,
+    this.needsPurchase = false,
+    this.needsLogin = false,
+    this.isLocked = false,
+    this.payUrl,
+    this.payPriceText,
+    this.payBuyers = 0,
+  });
+
+  bool get hasMore => page < totalPages;
+
+  /// 是否可以在应用内发起购买（锁定为付费贴且有购买链接）。
+  bool get canPurchase => needsPurchase && payUrl != null;
+}
+
+/// 购买主题结果。
+class BuyResult {
+  final bool success;
+
+  /// true 表示无需扣费（已购买过 / 已解锁）。
+  final bool alreadyOwned;
+  final String message;
+
+  const BuyResult({required this.success, this.alreadyOwned = false, required this.message});
+}
+
+class UserProfile {
+  final int uid;
+  final String username;
+  final String? avatar;
+  final String? group;
+  final String? credits;
+  final int? threads;
+  final int? posts;
+  final int? friends;
+  final String? onlineTime;
+  final String? registerTime;
+  final String? signature;
+
+  const UserProfile({
+    required this.uid,
+    required this.username,
+    this.avatar,
+    this.group,
+    this.credits,
+    this.threads,
+    this.posts,
+    this.friends,
+    this.onlineTime,
+    this.registerTime,
+    this.signature,
+  });
+
+  UserProfile copyWith({
+    String? username,
+    String? avatar,
+    String? group,
+    String? credits,
+    int? threads,
+    int? posts,
+    int? friends,
+    String? onlineTime,
+    String? registerTime,
+    String? signature,
+  }) {
+    return UserProfile(
+      uid: uid,
+      username: username ?? this.username,
+      avatar: avatar ?? this.avatar,
+      group: group ?? this.group,
+      credits: credits ?? this.credits,
+      threads: threads ?? this.threads,
+      posts: posts ?? this.posts,
+      friends: friends ?? this.friends,
+      onlineTime: onlineTime ?? this.onlineTime,
+      registerTime: registerTime ?? this.registerTime,
+      signature: signature ?? this.signature,
+    );
+  }
+}
+
+class SignStatus {
+  final bool signedToday;
+  final int streakDays;
+  final int todayCount;
+  final String? rankText;
+  final String? rewardText;
+  final String? rawText;
+
+  const SignStatus({
+    required this.signedToday,
+    this.streakDays = 0,
+    this.todayCount = 0,
+    this.rankText,
+    this.rewardText,
+    this.rawText,
+  });
+}
+
+class SignResult {
+  final bool success;
+  final String message;
+
+  const SignResult({required this.success, required this.message});
+}
+
+class ReplyResult {
+  final bool success;
+  final String message;
+  final bool needCaptcha;
+
+  const ReplyResult({required this.success, required this.message, this.needCaptcha = false});
+}
+
+class LoginResult {
+  final bool success;
+  final String message;
+  final int remainingAttempts;
+
+  const LoginResult({
+    required this.success,
+    required this.message,
+    this.remainingAttempts = -1,
+  });
+}
