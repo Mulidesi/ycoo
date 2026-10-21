@@ -324,16 +324,50 @@ class ForumApi {
   }
 
   /// 拉取当前登录用户资料；未登录返回 null
+  ///
+  /// 两步：
+  ///  1. 打开资料页拿到 UID（`discuz_uid` / 跳转 URL / 头部用户链接任一）；
+  ///  2. 用移动端 JSON 接口取**准确的积分与社区统计** —— 与
+  ///     `spacecp&ac=credit&showcredit=1`（星币 / 经验 / 积分）和
+  ///     `space-uid-N.html`（帖子 / 关注 / 粉丝）同源，但不需要正则猜模板。
+  /// 接口失败时退回第 1 步页面的 HTML 解析。
   Future<UserProfile?> me() async {
     final r = await client.get('home.php?mod=space&do=profile');
     final url = r.url.toString();
     if (url.contains('mod=logging') || r.body.contains('请先登录')) return null;
-    final m = RegExp(r'space-uid-(\d+)').firstMatch(url);
     final header = parseHeaderUser(r.body);
-    if (m == null && header == null && !looksLoggedIn(r.body)) return null;
-    final uid = m != null ? int.parse(m.group(1)!) : header?.uid;
-    final profile = parseProfile(r.body, fallbackUid: uid, fallbackName: header?.name);
-    return profile;
+    final fromUrl = RegExp(r'space-uid-(\d+)').firstMatch(url)?.group(1);
+    final uid = int.tryParse(fromUrl ?? '') ?? parseDiscuzUid(r.body) ?? header?.uid;
+    if (uid == null && header == null && !looksLoggedIn(r.body)) return null;
+
+    // 先按 HTML 解析，作为兜底 + 头像 / 用户组来源
+    final html = parseProfile(r.body, fallbackUid: uid, fallbackName: header?.name);
+
+    if (uid != null && uid > 0) {
+      final api = await userStats(uid);
+      // 接口值优先；头像 / 用户组 / 签名等接口没有的字段由 HTML 兜底补齐
+      if (api != null) return api.mergeMissingFrom(html);
+    }
+    return html;
+  }
+
+  /// 取指定用户的积分与统计（移动端接口，无需额外登录态）。
+  ///
+  /// 返回 null 表示接口不可用 / 返回体不是预期结构，调用方应走 HTML 兜底。
+  Future<UserProfile?> userStats(int uid) async {
+    if (uid <= 0) return null;
+    try {
+      final r = await client.get(
+        'api/mobile/index.php?version=4&module=profile&uid=$uid',
+        referer: '$kBaseUrl/home.php?mod=space&uid=$uid',
+        // 不吸收 Set-Cookie：接口会重新下发 saltkey，避免干扰已登录会话
+        absorbCookies: false,
+      );
+      if (r.statusCode != 200) return null;
+      return parseProfileApi(r.body, fallbackUid: uid);
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------- 签到

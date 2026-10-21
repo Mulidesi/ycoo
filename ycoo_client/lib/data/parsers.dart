@@ -2,6 +2,7 @@
 /// 之所以与 UI 分离，是为了能直接用 curl 抓下来的真实页面做离线回归测试。
 library;
 
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:html/dom.dart';
@@ -527,11 +528,129 @@ bool looksLoggedOut(String html) {
   return hasLoginForm && !hasLogout;
 }
 
+/// 解析移动端 JSON 接口 `api/mobile/index.php?version=4&module=profile&uid=N`。
+///
+/// 这是「我的」页积分与统计的**主数据源**：与
+/// `home.php?mod=spacecp&ac=credit&showcredit=1`（积分页）和
+/// `space-uid-N.html`（空间页）展示的是同一份后台数据，但结构化、无模板依赖。
+///
+/// 关键字段：
+/// ```
+/// space.credits      总积分        9207
+/// space.extcredits2  经验          8456   ← 由 extcredits 映射决定，不写死
+/// space.extcredits3  贡献          1506
+/// space.extcredits4  星币          2026
+/// space.posts        帖子          714
+/// space.threads      主题          39
+/// space.following    关注          20
+/// space.follower     粉丝          188
+/// ```
+/// 积分类型的编号→名称映射由 `Variables.extcredits[*].title` 给出，
+/// 站点改过编号也不会错位；缺失时回退到本站约定（2 经验 / 3 贡献 / 4 星币）。
+UserProfile? parseProfileApi(String json, {int? fallbackUid, String? fallbackName}) {
+  Map<String, dynamic> root;
+  try {
+    final decoded = jsonDecode(json);
+    if (decoded is! Map<String, dynamic>) return null;
+    root = decoded;
+  } catch (_) {
+    return null;
+  }
+  final vars = root['Variables'];
+  if (vars is! Map<String, dynamic>) return null;
+  final space = vars['space'];
+  if (space is! Map<String, dynamic>) return null;
+
+  int? numOf(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    final s = v.toString().replaceAll(',', '').trim();
+    if (s.isEmpty) return null;
+    return int.tryParse(s);
+  }
+
+  String? strOf(dynamic v) {
+    if (v == null) return null;
+    final s = v.toString().trim();
+    return s.isEmpty ? null : s;
+  }
+
+  final uid = numOf(space['uid']) ?? fallbackUid ?? 0;
+  final name = strOf(space['username']) ?? fallbackName ?? '';
+
+  // 积分类型映射：{2: 经验, 3: 贡献, 4: 星币}
+  final creditsByTitle = <String, int>{};
+  final ext = vars['extcredits'];
+  if (ext is Map) {
+    ext.forEach((key, meta) {
+      if (meta is! Map) return;
+      final title = strOf(meta['title']);
+      if (title == null) return;
+      final value = numOf(space['extcredits$key']);
+      if (value != null) creditsByTitle[title] = value;
+    });
+  }
+  // 站点约定兜底（creditnotice = '2|经验|,3|贡献|,4|星币|'）
+  creditsByTitle.putIfAbsent('经验', () => numOf(space['extcredits2']) ?? -1);
+  creditsByTitle.putIfAbsent('贡献', () => numOf(space['extcredits3']) ?? -1);
+  creditsByTitle.putIfAbsent('星币', () => numOf(space['extcredits4']) ?? -1);
+  int? credit(String title) {
+    final v = creditsByTitle[title];
+    return (v == null || v < 0) ? null : v;
+  }
+
+  // 头像：member_avatar 是当前登录用户的，noavatar 视为没有
+  String? avatar;
+  final memberAvatar = strOf(vars['member_avatar']);
+  final memberUid = numOf(vars['member_uid']);
+  if (memberAvatar != null &&
+      !memberAvatar.contains('noavatar') &&
+      (memberUid == null || memberUid == uid)) {
+    avatar = absoluteUrl(memberAvatar);
+  }
+
+  if (uid == 0 && name.isEmpty) return null;
+  return UserProfile(
+    uid: uid,
+    username: name.isEmpty ? '用户' : name,
+    avatar: avatar,
+    points: numOf(space['credits']),
+    coins: credit('星币'),
+    exp: credit('经验'),
+    contribution: credit('贡献'),
+    posts: numOf(space['posts']),
+    threads: numOf(space['threads']),
+    following: numOf(space['following']),
+    followers: numOf(space['follower']),
+    friends: numOf(space['friends']),
+    digestPosts: numOf(space['digestposts']),
+    onlineHours: numOf(space['oltime']),
+    views: numOf(space['views']),
+    feeds: numOf(space['feeds']),
+    registerTime: strOf(space['regdate']),
+    signature: strOf(space['spacedescription']),
+  );
+}
+
+/// 从任意登录态页面里取当前用户 UID（Discuz 每页都注入 `discuz_uid = '31981'`）。
+int? parseDiscuzUid(String html) {
+  final m = RegExp(r"discuz_uid\s*=\s*'(\d+)'").firstMatch(html);
+  if (m == null) return null;
+  final uid = int.tryParse(m.group(1)!);
+  return (uid == null || uid <= 0) ? null : uid;
+}
+
+/// HTML 兜底解析（移动端接口不可用时）。
+///
+/// 兼容两个页面：
+///  - `home.php?mod=spacecp&ac=credit&showcredit=1`：星币 / 经验 / 贡献 / 总积分 + 积分公式
+///  - `space-uid-N.html`：帖子 / 关注 / 粉丝
 UserProfile? parseProfile(String html, {int? fallbackUid, String? fallbackName}) {
   final doc = html_parser.parse(html);
   final body = doc.documentElement?.text ?? html;
 
-  var uid = fallbackUid ?? 0;
+  var uid = fallbackUid ?? parseDiscuzUid(html) ?? 0;
   var name = fallbackName ?? '';
 
   final title = _text(doc.querySelector('title'));
@@ -542,14 +661,29 @@ UserProfile? parseProfile(String html, {int? fallbackUid, String? fallbackName})
   uid = _uidFromHref(uidLink?.attributes['href']) ?? uid;
 
   String? pick(RegExp re) => re.firstMatch(body)?.group(1)?.trim();
+  int? pickInt(RegExp re) {
+    final s = pick(re);
+    return s == null ? null : _toInt(s);
+  }
 
   final group = pick(RegExp(r'用户组[:：\s]*([^\s\n]{2,16})'));
-  final credits = pick(RegExp(r'积分[:：\s]*([\d,]+)'));
-  final threads = pick(RegExp(r'主题数[:：\s]*([\d,]+)'));
-  final posts = pick(RegExp(r'(?:回帖数|帖子数)[:：\s]*([\d,]+)'));
-  final friends = pick(RegExp(r'好友数[:：\s]*([\d,]+)'));
-  final online = pick(RegExp(r'在线时间[:：\s]*([^\s\n]{1,20})'));
   final reg = pick(RegExp(r'注册时间[:：\s]*([\d]{4}-\d{1,2}-\d{1,2})'));
+
+  // 积分页：「星币: 2026」「经验: 8456」「贡献: 1506」「积分: 9207 ( 总积分= … )」
+  final coins = pickInt(RegExp(r'星币[:：\s]*([\d,]+)'));
+  final exp = pickInt(RegExp(r'经验[:：\s]*([\d,]+)'));
+  final contribution = pickInt(RegExp(r'贡献[:：\s]*([\d,]+)'));
+  final points = pickInt(RegExp(r'积分[:：\s]*([\d,]+)'));
+  final formula = pick(RegExp(r'(总积分\s*=\s*[^\n<]{4,120})'));
+
+  // 空间页：714 帖子 / 20 关注 / 188 粉丝；资料页：主题数 / 回帖数 / 好友数
+  final posts = pickInt(RegExp(r'([\d,]+)\s*帖子')) ?? pickInt(RegExp(r'(?:回帖数|帖子数)[:：\s]*([\d,]+)'));
+  final following = pickInt(RegExp(r'([\d,]+)\s*关注'));
+  final followers = pickInt(RegExp(r'([\d,]+)\s*粉丝'));
+  final threads = pickInt(RegExp(r'主题数[:：\s]*([\d,]+)'));
+  final friends = pickInt(RegExp(r'好友数[:：\s]*([\d,]+)'));
+  final onlineHours = pickInt(RegExp(r'在线时间[:：\s]*([\d,]+)\s*小时'));
+  final views = pickInt(RegExp(r'空间访问量[:：\s]*([\d,]+)'));
 
   final avatarImg = doc.querySelector('img.user_avatar, .avt img');
   final avatar = avatarImg?.attributes['src'];
@@ -560,11 +694,18 @@ UserProfile? parseProfile(String html, {int? fallbackUid, String? fallbackName})
     username: name.isEmpty ? (fallbackName ?? '用户') : name,
     avatar: avatar == null ? null : absoluteUrl(avatar),
     group: group,
-    credits: credits,
-    threads: threads == null ? null : _toInt(threads),
-    posts: posts == null ? null : _toInt(posts),
-    friends: friends == null ? null : _toInt(friends),
-    onlineTime: online,
+    points: points,
+    coins: coins,
+    exp: exp,
+    contribution: contribution,
+    creditFormula: formula,
+    posts: posts,
+    threads: threads,
+    following: following,
+    followers: followers,
+    friends: friends,
+    onlineHours: onlineHours,
+    views: views,
     registerTime: reg,
   );
 }

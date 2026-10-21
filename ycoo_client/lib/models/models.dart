@@ -169,16 +169,63 @@ class BuyResult {
   const BuyResult({required this.success, this.alreadyOwned = false, required this.message});
 }
 
+/// 当前登录用户的资料与统计。
+///
+/// 数据来源（优先级从高到低）：
+///  1. 移动端 JSON 接口 `api/mobile/index.php?version=4&module=profile&uid=N`
+///     —— 与 `spacecp&ac=credit&showcredit=1`（积分页）、`space-uid-N.html`（空间页）
+///     展示的是同一份后台数据，但结构化、无需正则，数值最准；
+///  2. 上述两个页面的 HTML 兜底解析（`parseProfile`）。
 class UserProfile {
   final int uid;
   final String username;
   final String? avatar;
   final String? group;
-  final String? credits;
-  final int? threads;
+
+  // ---- 积分体系 ----
+  /// 总积分（空间页 / 积分页的「积分」）。
+  final int? points;
+
+  /// 星币（extcredits4）。
+  final int? coins;
+
+  /// 经验（extcredits2）。
+  final int? exp;
+
+  /// 贡献（extcredits3）。
+  final int? contribution;
+
+  /// 总积分公式说明，如「总积分= 发帖数 X 1.5 + …」。
+  final String? creditFormula;
+
+  // ---- 社区统计 ----
+  /// 帖子总数（主题 + 回复）。
   final int? posts;
+
+  /// 主题数。
+  final int? threads;
+
+  /// 关注数。
+  final int? following;
+
+  /// 粉丝数。
+  final int? followers;
+
+  /// 好友数。
   final int? friends;
-  final String? onlineTime;
+
+  /// 精华帖数。
+  final int? digestPosts;
+
+  /// 在线时长（小时）。
+  final int? onlineHours;
+
+  /// 空间访问量。
+  final int? views;
+
+  /// 广播数。
+  final int? feeds;
+
   final String? registerTime;
   final String? signature;
 
@@ -187,11 +234,20 @@ class UserProfile {
     required this.username,
     this.avatar,
     this.group,
-    this.credits,
-    this.threads,
+    this.points,
+    this.coins,
+    this.exp,
+    this.contribution,
+    this.creditFormula,
     this.posts,
+    this.threads,
+    this.following,
+    this.followers,
     this.friends,
-    this.onlineTime,
+    this.digestPosts,
+    this.onlineHours,
+    this.views,
+    this.feeds,
     this.registerTime,
     this.signature,
   });
@@ -200,11 +256,20 @@ class UserProfile {
     String? username,
     String? avatar,
     String? group,
-    String? credits,
-    int? threads,
+    int? points,
+    int? coins,
+    int? exp,
+    int? contribution,
+    String? creditFormula,
     int? posts,
+    int? threads,
+    int? following,
+    int? followers,
     int? friends,
-    String? onlineTime,
+    int? digestPosts,
+    int? onlineHours,
+    int? views,
+    int? feeds,
     String? registerTime,
     String? signature,
   }) {
@@ -213,13 +278,51 @@ class UserProfile {
       username: username ?? this.username,
       avatar: avatar ?? this.avatar,
       group: group ?? this.group,
-      credits: credits ?? this.credits,
-      threads: threads ?? this.threads,
+      points: points ?? this.points,
+      coins: coins ?? this.coins,
+      exp: exp ?? this.exp,
+      contribution: contribution ?? this.contribution,
+      creditFormula: creditFormula ?? this.creditFormula,
       posts: posts ?? this.posts,
+      threads: threads ?? this.threads,
+      following: following ?? this.following,
+      followers: followers ?? this.followers,
       friends: friends ?? this.friends,
-      onlineTime: onlineTime ?? this.onlineTime,
+      digestPosts: digestPosts ?? this.digestPosts,
+      onlineHours: onlineHours ?? this.onlineHours,
+      views: views ?? this.views,
+      feeds: feeds ?? this.feeds,
       registerTime: registerTime ?? this.registerTime,
       signature: signature ?? this.signature,
+    );
+  }
+
+  /// 用 [other] 里非空的字段补全当前对象缺失的部分。
+  ///
+  /// 当前对象的字段优先，[other] 只填空位（例如接口没有头像，就用 HTML 解析出的头像）。
+  UserProfile mergeMissingFrom(UserProfile? other) {
+    if (other == null) return this;
+    return UserProfile(
+      uid: uid != 0 ? uid : other.uid,
+      username: username.isNotEmpty ? username : other.username,
+      avatar: avatar ?? other.avatar,
+      group: group ?? other.group,
+      points: points ?? other.points,
+      coins: coins ?? other.coins,
+      exp: exp ?? other.exp,
+      contribution: contribution ?? other.contribution,
+      creditFormula: creditFormula ?? other.creditFormula,
+      posts: posts ?? other.posts,
+      threads: threads ?? other.threads,
+      following: following ?? other.following,
+      followers: followers ?? other.followers,
+      friends: friends ?? other.friends,
+      digestPosts: digestPosts ?? other.digestPosts,
+      onlineHours: onlineHours ?? other.onlineHours,
+      views: views ?? other.views,
+      feeds: feeds ?? other.feeds,
+      registerTime: registerTime ?? other.registerTime,
+      signature: signature ?? other.signature,
     );
   }
 }

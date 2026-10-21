@@ -48,7 +48,9 @@ Future<void> main(List<String> args) async {
     print('success=${r.success} message=${r.message} 剩余尝试=${r.remainingAttempts}');
     if (r.success) {
       final me = await api.me();
-      print('当前用户: ${me?.username} uid=${me?.uid} 积分=${me?.credits} 用户组=${me?.group}');
+      print('当前用户: ${me?.username} uid=${me?.uid} 用户组=${me?.group}');
+      print('  积分=${me?.points} 星币=${me?.coins} 经验=${me?.exp} 贡献=${me?.contribution}');
+      print('  帖子=${me?.posts} 主题=${me?.threads} 关注=${me?.following} 粉丝=${me?.followers}');
       final s2 = await api.signStatus();
       print('签到状态: 已签到=${s2.signedToday} 连续=${s2.streakDays}');
       if (args.contains('--sign')) {

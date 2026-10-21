@@ -85,6 +85,12 @@
 - **附件抽出后正文可能只剩空白**：判断「正文为空」不能只看 `contentHtml.trim().isEmpty`，
   要按解析后的纯文本（或含 `<img>`）判断，否则只有附件的帖子会误报「正文需登录或购买后可见」。
 - **私密版块**：版块列表 `dd` 中出现「私密版块」，未授权用户进入会提示无权限。
+- **移动端 JSON 接口存在且免登录**：`api/mobile/index.php?version=4&module=profile&uid=N` 直接返回
+  `Variables.space`，含 `credits`（总积分）、`extcredits2/3/4`（经验/贡献/星币）、`posts`、`threads`、
+  `following`、`follower`、`oltime`、`regdate` 等。「我的」页积分与统计用它，不要正则爬
+  `spacecp&ac=credit&showcredit=1` / `space-uid-N.html`——那两个页面里积分记录表格的「星币 -5」
+  会把正则带偏。积分编号→名称映射取 `Variables.extcredits[*].title`，按名称取值才不会因站点改编号错位。
+- **移动端接口会重新下发 `saltkey`**：请求时不要吸收 Set-Cookie，否则可能干扰已登录会话。
 - **正文结构**：`<br>` 分段 + `<img class="zoom">` 图片 + `<a>` 外链 + `<blockquote>` 引用 + `<pre>` 代码。
 
 ---
@@ -173,7 +179,8 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.0.11.apk` | 当前最新（v1.0.11，正文排版对齐移动端；versionCode 12，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.12.apk` | 当前最新（v1.0.12，「我的」页积分/统计改为接口取值；versionCode 13，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.11.apk` | v1.0.11（正文排版对齐移动端；versionCode 12） |
 | GitHub Release | `ycoo-client-1.0.10.apk` | v1.0.10（修复付费主题购买；versionCode 11） |
 | 本地构建 | `build/app/outputs/flutter-apk/app-release.apk` | 在英文路径构建时生成 |
 | 历史本地包 | `dist/ycoo-client-1.0.9.apk` | v1.0.9（P4：附件卡片、引用折叠、收藏板块、动态取色、后台签到） |
@@ -188,6 +195,8 @@ dart run tool/parse_test.dart ../recon     # 版块 / 列表 / 帖子元信息
 dart run tool/parse_check.dart ../recon    # 楼层、楼主、锁定状态
 dart run tool/content_check.dart ../recon  # 正文零丢失校验（文本 + 图片）
 dart run tool/attach_check.dart ../recon   # 附件卡片 + 正文无残留（含全样本扫描）
+dart run tool/stats_check.dart ../recon    # 我的页积分/统计解析断言
+dart run tool/stats_check.dart ../recon --live  # 额外打一次真实移动端接口
 
 # 真实站点联调
 dart run tool/live_test.dart            # 只读接口

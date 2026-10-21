@@ -96,13 +96,20 @@ class DiscuzClient {
     }
   }
 
-  Future<DResponse> get(String path, {String? referer, bool ajax = false}) async {
+  /// [absorbCookies] 为 false 时不吸收响应里的 Set-Cookie。
+  /// 移动端 JSON 接口会重新下发 `saltkey` 等 Cookie，没必要让它干扰登录态。
+  Future<DResponse> get(
+    String path, {
+    String? referer,
+    bool ajax = false,
+    bool absorbCookies = true,
+  }) async {
     final uri = Uri.parse(path.startsWith('http') ? path : '$kBaseUrl/$path');
     try {
       final r = await _client
           .get(uri, headers: _headers(ajax: ajax, referer: referer))
           .timeout(const Duration(seconds: 25));
-      _absorb(r);
+      if (absorbCookies) _absorb(r);
       return DResponse(r.statusCode, _decode(r), r.request?.url ?? uri);
     } on TimeoutException {
       throw ForumException('请求超时，请检查网络后重试', network: true);

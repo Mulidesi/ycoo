@@ -307,21 +307,53 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
             ],
           ),
           const SizedBox(height: 18),
+          // 与站点两处页面一致：上排是积分体系（积分页），下排是社区统计（空间页）
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.12),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Row(
+            child: Column(
               children: [
-                _metric('积分', u?.credits ?? '—'),
-                _metric('主题', u?.threads?.toString() ?? '—'),
-                _metric('回帖', u?.posts?.toString() ?? '—'),
-                _metric('好友', u?.friends?.toString() ?? '—'),
+                Row(
+                  children: [
+                    _metric('星币', u?.coins),
+                    _metric('经验', u?.exp),
+                    _metric('积分', u?.points),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _metric('帖子', u?.posts),
+                    _metric('关注', u?.following),
+                    _metric('粉丝', u?.followers),
+                  ],
+                ),
               ],
             ),
           ),
+          if (u != null && u.uid > 0) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    [
+                      if ((u.threads ?? 0) > 0) '主题 ${u.threads}',
+                      if ((u.contribution ?? 0) > 0) '贡献 ${u.contribution}',
+                      if ((u.friends ?? 0) > 0) '好友 ${u.friends}',
+                      if ((u.onlineHours ?? 0) > 0) '在线 ${u.onlineHours} 小时',
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white60, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -336,12 +368,12 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
         child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10.5)),
       );
 
-  Widget _metric(String label, String value) {
+  Widget _metric(String label, int? value) {
     return Expanded(
       child: Column(
         children: [
           Text(
-            value,
+            value == null ? '—' : _humanCount(value),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
@@ -351,6 +383,17 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
         ],
       ),
     );
+  }
+
+  /// 大数字加千分位，与站点显示一致（1,234 / 12,345）。
+  String _humanCount(int v) {
+    final s = v.abs().toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return v < 0 ? '-$buf' : buf.toString();
   }
 
   /// 编辑自动回复预设（最多 5 条，每条 ≤200 字）。

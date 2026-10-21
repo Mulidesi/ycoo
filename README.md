@@ -18,6 +18,7 @@
 
 | 版本 | 文件 | 说明 |
 | --- | --- | --- |
+| [v1.0.12](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.12) | `ycoo-client-1.0.12.apk` | 「我的」页积分/帖子/关注/粉丝改为接口取值，与站点一致；versionCode 13 |
 | [v1.0.11](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.11) | `ycoo-client-1.0.11.apk` | 正文排版对齐移动端：附件小图标不再被放大、隐藏提示文案不再泄漏；versionCode 12 |
 | [v1.0.10](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.10) | `ycoo-client-1.0.10.apk` | 修复付费主题购买；versionCode 11 |
 
@@ -38,6 +39,7 @@
 | 付费主题 | 应用内星币购买，走 `misc&action=pay` 流程，成功后自动刷新解锁 |
 | 附件 | 非图片附件卡片 + 流式下载进度，复用登录 Cookie 与 Referer |
 | 签到 | 状态、连续天数、今日人数、排名、奖励；自动签到 + 后台周期签到（Android） |
+| 我的 | 星币 / 经验 / 积分（积分页）+ 帖子 / 关注 / 粉丝（空间页），取自移动端接口，与站点数值一致 |
 | 自动化 | 隐藏贴自动回复：随机延时、按 tid 去重、每日限额、版块白名单 |
 | 站点 | 主域名切换（`ycoo.net` ↔ `pc.sysbbs.com`）、站内链接应用内跳转、剪贴板链接识别 |
 | 外观 | Material 3 亮/暗主题、Material You 动态取色（Android 12+）、悬浮液态玻璃底栏 |
@@ -80,7 +82,14 @@
 - **购买成功后 `div.locked` 不会消失**：内容退化成 `<a href="…action=viewpayments…">记录</a> 付费主题, 价格: N 星币`，正文回到 `#postmessage`。判断「是否仍需购买」必须看**购买入口 `a[href*=action=pay]` 与阻塞措辞**，只看「星币」会把已购帖判成锁定。
 - **购买回调名可能没有 handlekey**：`misc&action=pay` 提交成功后返回 `succeedhandle_('…', '主题购买成功', {})`，下划线后为空，正则必须写 `\w*`；失败时是 `errorhandle_pay('抱歉，您的星币不足', {})`。
 - **多个 `Set-Cookie` 被逗号拼接**：`expires` 里也含逗号，需按 `,(?=name=)` 切分，否则 Cookie 解析错位导致登录态丢失。
-- **移动端接口会 302**：`?mobile=2` 跳回桌面模板，所以统一按桌面 HTML 解析。
+- **移动端模板会 302，但移动端 JSON 接口可用**：`?mobile=2` 会跳回桌面模板，所以正文/列表仍按桌面 HTML 解析；
+  但 `api/mobile/index.php?version=4&module=profile&uid=N` 是**免登录可用的 JSON 接口**，
+  「我的」页的积分与统计就走它（见下条）。
+- **积分/统计别去正则爬页面**：`spacecp&ac=credit&showcredit=1`（星币/经验/积分）与 `space-uid-N.html`
+  （帖子/关注/粉丝）都是重模板页面，正则很容易被积分记录表格里的「星币 -5」之类干扰。
+  移动端接口一次给全：`space.credits`（总积分）、`space.extcredits2/3/4`（经验/贡献/星币）、
+  `space.posts`、`space.threads`、`space.following`、`space.follower`。
+  积分编号→名称的映射在 `Variables.extcredits[*].title` 里，按名称取才不会因站点改编号而错位。
 - **附件图片不在正文里**：登录态下图片附件在兄弟节点 `div.pattl`，`img.src` 是占位图，真实地址在 `zoomfile` / `file`。
 - **文件附件有两处，其中一处会"炸图"**：除了 `div.pattl`，`#postmessage` 里还有 `<ignore_js_op>`，内含 16px 的
   `static/image/filetype/*.gif` 小图标 + 下载链接 + `display:none` 的 `.tip` 提示。整块当正文渲染会把小图标拉成整屏问号，

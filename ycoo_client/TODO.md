@@ -78,10 +78,30 @@
       `test/preview_attach.dart` 输出 `goldens/attach_body.png`、`goldens/attach_mixed.png` 供人工比对
 - [x] 验证：`flutter analyze` 0 issue；`flutter test` 17 全过；全样本 168 楼 0 残留
 
+## P8 — 我的页积分与统计（v1.0.12）
+
+- [x] 问题：`me()` 用正则从 `home.php?mod=space&do=profile` 抠「积分/主题数/回帖数/好友数」，
+      模板改版后全部失配，「我的」页显示 `—` 或错值
+- [x] 数据源换成移动端 JSON 接口 `api/mobile/index.php?version=4&module=profile&uid=N`：
+      与 `spacecp&ac=credit&showcredit=1`（星币/经验/积分）、`space-uid-N.html`（帖子/关注/粉丝）同源，结构化且免登录
+- [x] `parseProfileApi()`：`space.credits` → 总积分、`extcredits*` → 经验/贡献/星币（按 `Variables.extcredits[*].title`
+      映射，站点改编号不错位）、`posts/threads/following/follower/friends/oltime/views/feeds/regdate`
+- [x] `parseDiscuzUid()`：从任意登录态页面的 `discuz_uid` 取 UID，作为跳转 URL 与头部链接之外的第三来源
+- [x] `parseProfile()` HTML 兜底同步增强：积分页取星币/经验/贡献/总积分+公式，空间页取「714 帖子 / 20 关注 / 188 粉丝」
+- [x] `me()` 流程：资料页取 UID → 接口取准确数值 → `mergeMissingFrom` 用 HTML 补头像/用户组 → 接口失败自动退回 HTML
+- [x] `DiscuzClient.get(absorbCookies: false)`：接口会重发 `saltkey`，避免污染登录会话
+- [x] UI：资料卡改为两排 3 列 —— 上排「星币 / 经验 / 积分」，下排「帖子 / 关注 / 粉丝」，
+      副行显示「主题 · 贡献 · 好友 · 在线时长」，数字加千分位
+- [x] 回归：`test/user_stats_test.dart` 12 例（含 MockClient 走通 `me()` 全链路与接口 500 降级）；
+      `tool/stats_check.dart` 离线断言 + `--live` 真实接口；`test/preview_profile.dart` 输出 `goldens/profile_card.png`
+- [x] 验证：真实接口实测 星币 2021 / 经验 8456 / 积分 9207 / 帖子 714 / 关注 20 / 粉丝 188（与站点一致）；
+      `flutter analyze` 0 issue；`flutter test` 29 全过
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
 - P4 完成 = 附件下载 / 引用折叠 / 收藏版块 / 动态取色 / 后台签到 + analyze 0 issue + 12 测试全过
 - P6 完成 = 付费购买修复 + analyze 0 issue + 17 测试全过 + CI 出包
 - P7 完成 = 正文排版对齐移动端 + analyze 0 issue + 17 测试全过 + 41 样本 0 残留
-- APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 / v1.0.11 由 GitHub Actions 产出
+- P8 完成 = 我的页积分/统计取值准确 + analyze 0 issue + 29 测试全过 + 真实接口实测一致
+- APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 起由 GitHub Actions 产出
