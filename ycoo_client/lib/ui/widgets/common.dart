@@ -162,6 +162,24 @@ class SectionCard extends StatelessWidget {
   }
 }
 
+/// 悬浮底栏占位：底栏用 `extendBody` 盖在内容之上，
+/// 滚动列表必须在底部留出 [value] 的空白，否则最后一条会被胶囊挡住。
+///
+/// 由 [HomeShell] 在窄屏分支注入（含系统安全区），
+/// 二级页面（推入的路由）不在其子树内，[of] 返回 0，无需额外留白。
+class BottomBarInset extends InheritedWidget {
+  const BottomBarInset({super.key, required this.value, required super.child});
+
+  /// 需要预留的底部高度（含安全区与呼吸距离）。
+  final double value;
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<BottomBarInset>()?.value ?? 0;
+
+  @override
+  bool updateShouldNotify(BottomBarInset oldWidget) => oldWidget.value != value;
+}
+
 String humanNumber(int n) {
   if (n >= 10000) {
     final v = n / 10000;

@@ -27,6 +27,18 @@ class AppSettings {
   bool autoSign;
   bool autoReply;
 
+  /// 默认自动回复预设（首次启动 / 预设被清空时写入）。
+  ///
+  /// 都是通用致谢语，不含具体版块或资源指向，任何帖子下发都不违和；
+  /// 条数取满 [Preset.maxCount]，随机取一时有足够差异。
+  static const List<String> defaultReplyPresets = <String>[
+    '感谢分享，感谢楼主！',
+    '感谢楼主分享，先收藏了，慢慢研究。',
+    '谢谢分享，正好需要，支持一下。',
+    '楼主辛苦了，感谢分享好资源。',
+    '路过支持一下，感谢楼主！',
+  ];
+
   /// 兼容旧字段：首条预设正文。
   String replyContent;
 
@@ -69,16 +81,41 @@ class AppSettings {
     this.clipboardDetect = true,
     List<int>? favoriteFids,
     this.dynamicColor = true,
-  })  : replyPresets = replyPresets ?? <String>[],
+  })  : replyPresets = _seedPresets(replyPresets),
         replyWhitelist = replyWhitelist ?? <int>{},
         favoriteFids = favoriteFids ?? <int>[];
 
+  /// 预设初始化：空列表（首次启动 / 老版本没有该字段 / 被清空）时补默认值，
+  /// 保证自动回复任何时候都有内容可发。
+  ///
+  /// 老版本只写过一条内置默认语（`感谢分享，感谢楼主！`）的，也视为「没设置过」，
+  /// 一并升级成整套默认预设。
+  static List<String> _seedPresets(List<String>? presets) {
+    if (presets == null) return List<String>.of(defaultReplyPresets);
+    final List<String> cleaned = <String>[
+      for (final String p in presets)
+        if (p.trim().isNotEmpty) p.trim(),
+    ];
+    if (cleaned.isEmpty) return List<String>.of(defaultReplyPresets);
+    if (cleaned.length == 1 && cleaned.first == defaultReplyPresets.first) {
+      return List<String>.of(defaultReplyPresets);
+    }
+    return cleaned;
+  }
+
   /// 归一化后的有效预设（去空、去重、限长、最多 5 条）。
+  ///
+  /// 全部无效时回退到默认预设 —— 自动回复不能处在「开着但没有内容」的状态。
   List<Preset> get effectivePresets {
+    final List<Preset> out = _normalize(replyPresets);
+    return out.isEmpty ? _normalize(defaultReplyPresets) : out;
+  }
+
+  List<Preset> _normalize(List<String> raw) {
     final Set<String> seen = <String>{};
     final List<Preset> out = <Preset>[];
-    for (final String raw in replyPresets) {
-      final String t = raw.trim();
+    for (final String item in raw) {
+      final String t = item.trim();
       if (t.isEmpty || seen.contains(t) || t.length > Preset.maxLength) continue;
       seen.add(t);
       out.add(Preset(text: t));
@@ -111,17 +148,24 @@ class AppSettings {
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) {
-    // 兼容旧版本：没有 replyPresets 时用 replyContent 兜底
+    // 兼容旧版本：早期只有单条 replyContent，后来才有 replyPresets
     final List<dynamic>? rawPresets = j['replyPresets'] as List<dynamic>?;
     final String replyContent =
-        j['replyContent'] as String? ?? '感谢分享，感谢楼主！';
-    final List<String> presets = rawPresets == null
-        ? <String>[replyContent]
-        : rawPresets.map((dynamic e) => e.toString()).toList();
+        (j['replyContent'] as String?)?.trim() ?? '';
+    final List<String> presets;
+    if (rawPresets == null || rawPresets.isEmpty) {
+      // 没改过回复内容（还是内置那句）或压根没有：直接用整套默认预设；
+      // 自定义过的则保留用户那句话作为唯一预设
+      presets = replyContent.isEmpty || replyContent == defaultReplyPresets.first
+          ? <String>[]
+          : <String>[replyContent];
+    } else {
+      presets = rawPresets.map((dynamic e) => e.toString()).toList();
+    }
     return AppSettings(
       autoSign: j['autoSign'] as bool? ?? true,
       autoReply: j['autoReply'] as bool? ?? true,
-      replyContent: replyContent,
+      replyContent: replyContent.isEmpty ? defaultReplyPresets.first : replyContent,
       replyPresets: presets,
       dailyReplyLimit: j['dailyReplyLimit'] as int? ?? 20,
       replyWhitelist:
@@ -554,8 +598,10 @@ class AppState extends ChangeNotifier {
         out.add(t);
         if (out.length >= Preset.maxCount) break;
       }
-      s.replyPresets = out;
-      if (out.isNotEmpty) s.replyContent = out.first;
+      // 清空后不留「空预设」状态：回落到默认预设
+      s.replyPresets =
+          out.isEmpty ? List<String>.of(AppSettings.defaultReplyPresets) : out;
+      s.replyContent = s.replyPresets.first;
     });
     replyQueue.setPresets(settings.effectivePresets);
   }

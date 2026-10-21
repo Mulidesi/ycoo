@@ -97,6 +97,24 @@
 - [x] 验证：真实接口实测 星币 2021 / 经验 8456 / 积分 9207 / 帖子 714 / 关注 20 / 粉丝 188（与站点一致）；
       `flutter analyze` 0 issue；`flutter test` 29 全过
 
+## P9 — 预设初始化 + 底栏不遮挡内容（v1.0.13）
+
+- [x] 问题 1：自动回复预设首次启动是空列表 → `automation.pickPreset()` 抛 `没有可用的自动回复预设`，
+      「隐藏贴自动回复」开关打开也不回帖，设置页副标题显示「尚未设置」
+- [x] `AppSettings.defaultReplyPresets`：5 条通用致谢预设（取满 `Preset.maxCount`，随机取一时有差异）
+- [x] 三处兜底：构造参数为空 / `fromJson` 读到空数组 / `effectivePresets` 归一化后为空，都回落到默认预设
+- [x] 老版本迁移：只存过一条内置默认语（`感谢分享，感谢楼主！`）的视为「没设置过」，一并升级成整套；
+      自定义过 `replyContent` 的仍保留用户原话
+- [x] `updateReplyPresets`：全部清空时不留空状态，回落到默认预设并同步 `replyContent`
+- [x] 预设编辑弹窗新增「恢复默认」按钮；提示文案说明「全部清空会回落到默认预设」
+- [x] 问题 2：`Scaffold(extendBody: true)` 的悬浮底栏盖在内容之上，首页 / 版块 / 我的三个列表末条被胶囊挡住
+- [x] `YuanSizes.barTotalHeight`（4 + 64 + 12）+ `bottomBarInset(safeBottom)`，安全区在 `removePadding` 之前取
+- [x] `BottomBarInset`（InheritedWidget）由 `HomeShell` 窄屏分支注入；`ThreadListView` / 版块页 / 我的页
+      把 `BottomBarInset.of(context)` 加进 `ListView.padding.bottom`；二级路由自动为 0
+- [x] 回归：`test/automation_presets_test.dart` 13 例、`test/bottom_bar_inset_test.dart` 6 例；
+      `test/preview_home.dart` 输出 `goldens/home_bottom.png`
+- [x] 验证：`flutter analyze` 0 issue；`flutter test` 48 全过（1 项因缺 recon 样本跳过）
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
@@ -104,4 +122,5 @@
 - P6 完成 = 付费购买修复 + analyze 0 issue + 17 测试全过 + CI 出包
 - P7 完成 = 正文排版对齐移动端 + analyze 0 issue + 17 测试全过 + 41 样本 0 残留
 - P8 完成 = 我的页积分/统计取值准确 + analyze 0 issue + 29 测试全过 + 真实接口实测一致
+- P9 完成 = 预设默认初始化 + 底栏不遮挡列表 + analyze 0 issue + 48 测试全过
 - APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 起由 GitHub Actions 产出

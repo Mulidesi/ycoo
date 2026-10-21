@@ -93,6 +93,17 @@
 - **移动端接口会重新下发 `saltkey`**：请求时不要吸收 Set-Cookie，否则可能干扰已登录会话。
 - **正文结构**：`<br>` 分段 + `<img class="zoom">` 图片 + `<a>` 外链 + `<blockquote>` 引用 + `<pre>` 代码。
 
+### 6. 界面约束（易踩坑）
+
+- **悬浮底栏遮挡列表**：底栏用 `Scaffold(extendBody: true)` 浮在内容之上，页面内边距不会自动让位。
+  底部留白必须 = `MediaQuery.viewPadding.bottom`（安全区）+ `YuanSizes.barTotalHeight`（4 + 64 + 12）+ 16（呼吸距离），
+  统一由 `HomeShell` 注入 `BottomBarInset`，页面用 `BottomBarInset.of(context)` 加进 `ListView.padding.bottom`。
+  推入的二级路由不在其子树内，`of()` 返回 0，不会多留空白。
+  注意 `MediaQuery.removePadding(removeBottom: true)` 会把 `viewPadding` 一起清掉，所以安全区要在移除**之前**算。
+- **自动回复预设必须自带默认值**：`replyPresets` 为空时自动回复会抛 `没有可用的自动回复预设`，用户看到的是
+  「开关开着但不回帖」。现在 `AppSettings` 在构造 / `fromJson` / `effectivePresets` 三处都会回落到
+  `defaultReplyPresets`（5 条），老版本只存了一条内置默认语的也一并升级。
+
 ---
 
 ## 二、客户端设计
@@ -179,7 +190,8 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.0.12.apk` | 当前最新（v1.0.12，「我的」页积分/统计改为接口取值；versionCode 13，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.13.apk` | 当前最新（v1.0.13，自动回复预设默认初始化 + 底栏不遮挡列表；versionCode 14，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.12.apk` | v1.0.12（「我的」页积分/统计改为接口取值；versionCode 13） |
 | GitHub Release | `ycoo-client-1.0.11.apk` | v1.0.11（正文排版对齐移动端；versionCode 12） |
 | GitHub Release | `ycoo-client-1.0.10.apk` | v1.0.10（修复付费主题购买；versionCode 11） |
 | 本地构建 | `build/app/outputs/flutter-apk/app-release.apk` | 在英文路径构建时生成 |
@@ -212,6 +224,9 @@ flutter test test/image_loader_test.dart   # 离线：Cookie / Referer 降级 / 
 flutter test test/live_image_test.dart     # 联网：真实图片下载并解码
 flutter test test/ui_smoke_test.dart       # 卡片 / 正文布局、窄屏不溢出
 flutter test test/detail_layout_test.dart  # 详情页正文与评论分栏
+flutter test test/automation_presets_test.dart  # 自动回复预设初始化 / 升级迁移 / 队列同步
+flutter test test/bottom_bar_inset_test.dart    # 悬浮底栏占位高度与列表底部留白
+flutter test test/preview_home.dart --update-goldens   # 底栏 + 列表版式预览 PNG
 flutter test --update-goldens test/golden_preview_test.dart  # 生成版式预览 PNG
 ```
 

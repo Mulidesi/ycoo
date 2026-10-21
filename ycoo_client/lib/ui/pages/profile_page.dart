@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/storage/automation_models.dart' show Preset;
 import '../../data/parsers.dart';
 import '../../design/tokens.dart';
 import '../../models/models.dart';
@@ -45,7 +46,12 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(YuanSpace.md, YuanSpace.xs, YuanSpace.md, YuanSpace.xxl),
+        padding: EdgeInsets.fromLTRB(
+          YuanSpace.md,
+          YuanSpace.xs,
+          YuanSpace.md,
+          YuanSpace.xxl + BottomBarInset.of(context),
+        ),
         children: [
           _profileCard(theme, st, u),
           const SizedBox(height: 14),
@@ -438,22 +444,41 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                         ),
                       ),
                     ),
-                  if (controllers.length < 5)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
+                  Row(
+                    children: [
+                      if (controllers.length < Preset.maxCount)
+                        TextButton.icon(
+                          onPressed: () {
+                            controllers.add(TextEditingController());
+                            setLocal(() {});
+                          },
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('添加一条', style: TextStyle(fontSize: 12.5)),
+                        ),
+                      const Spacer(),
+                      TextButton.icon(
                         onPressed: () {
-                          controllers.add(TextEditingController());
+                          // 恢复默认预设（首次启动写入的就是这一套）
+                          const defaults = AppSettings.defaultReplyPresets;
+                          for (var i = 0; i < controllers.length && i < defaults.length; i++) {
+                            controllers[i].text = defaults[i];
+                          }
+                          while (controllers.length < defaults.length) {
+                            controllers.add(
+                              TextEditingController(text: defaults[controllers.length]),
+                            );
+                          }
                           setLocal(() {});
                         },
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('添加一条', style: TextStyle(fontSize: 12.5)),
+                        icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                        label: const Text('恢复默认', style: TextStyle(fontSize: 12.5)),
                       ),
-                    ),
+                    ],
+                  ),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      '开启自动回复时随机取一条发送；空条不计入。',
+                      '开启自动回复时随机取一条发送；空条不计入，全部清空会回落到默认预设。',
                       style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5),
                     ),
                   ),

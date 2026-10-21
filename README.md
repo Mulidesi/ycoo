@@ -18,6 +18,7 @@
 
 | 版本 | 文件 | 说明 |
 | --- | --- | --- |
+| [v1.0.13](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.13) | `ycoo-client-1.0.13.apk` | 自动回复预设默认初始化；悬浮底栏不再遮挡列表末条；versionCode 14 |
 | [v1.0.12](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.12) | `ycoo-client-1.0.12.apk` | 「我的」页积分/帖子/关注/粉丝改为接口取值，与站点一致；versionCode 13 |
 | [v1.0.11](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.11) | `ycoo-client-1.0.11.apk` | 正文排版对齐移动端：附件小图标不再被放大、隐藏提示文案不再泄漏；versionCode 12 |
 | [v1.0.10](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.10) | `ycoo-client-1.0.10.apk` | 修复付费主题购买；versionCode 11 |
@@ -40,7 +41,7 @@
 | 附件 | 非图片附件卡片 + 流式下载进度，复用登录 Cookie 与 Referer |
 | 签到 | 状态、连续天数、今日人数、排名、奖励；自动签到 + 后台周期签到（Android） |
 | 我的 | 星币 / 经验 / 积分（积分页）+ 帖子 / 关注 / 粉丝（空间页），取自移动端接口，与站点数值一致 |
-| 自动化 | 隐藏贴自动回复：随机延时、按 tid 去重、每日限额、版块白名单 |
+| 自动化 | 隐藏贴自动回复：预设默认初始化（5 条，可改可恢复默认）、随机延时、按 tid 去重、每日限额、版块白名单 |
 | 站点 | 主域名切换（`ycoo.net` ↔ `pc.sysbbs.com`）、站内链接应用内跳转、剪贴板链接识别 |
 | 外观 | Material 3 亮/暗主题、Material You 动态取色（Android 12+）、悬浮液态玻璃底栏 |
 
@@ -95,6 +96,9 @@
   `static/image/filetype/*.gif` 小图标 + 下载链接 + `display:none` 的 `.tip` 提示。整块当正文渲染会把小图标拉成整屏问号，
   并漏出「点击文件名下载附件」文案。正确做法是抽成附件卡片后从正文移除，并按 `<em>(13.83 KB, 下载次数: N)</em>`
   或 `<p>5.92 KB, 下载次数: N</p>` 两种写法解析大小。
+- **悬浮底栏会盖住列表末条**：底栏用 `extendBody: true` 浮在内容之上，页面自身的内边距不够。底栏高度
+  （`4 + 64 + 12`）加上系统安全区必须由列表底部 padding 让出来 —— 统一走 `BottomBarInset` +
+  `YuanSizes.bottomBarInset()`，二级页面（推入的路由）不在其子树内自动为 0。
 
 ## 构建
 

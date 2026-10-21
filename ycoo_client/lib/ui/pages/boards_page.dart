@@ -82,7 +82,7 @@ class _BoardsPageState extends State<BoardsPage> with AutomaticKeepAliveClientMi
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 28 + BottomBarInset.of(context)),
                     children: [
                       if (favBoards.isNotEmpty) ...[
                         Padding(

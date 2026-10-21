@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 import '../../core/navigation/in_app_nav.dart';
 import '../../core/utils/link_resolver.dart';
 import '../../design/glass/liquid_glass_bar.dart';
+import '../../design/tokens.dart';
 import '../../state/app_state.dart';
+import '../widgets/common.dart';
 import 'boards_page.dart';
 import 'feed_page.dart';
 import 'profile_page.dart';
@@ -136,12 +138,19 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         final body = IndexedStack(index: _index, children: _pages);
 
         if (!wide) {
+          // 底栏悬浮在内容之上，列表需要为它预留底部空间：
+          // 安全区 + 胶囊 + 上下外边距 + 呼吸距离
+          final barInset = YuanSizes.bottomBarInset(
+            MediaQuery.viewPaddingOf(context).bottom,
+          );
           return Scaffold(
-            // 底栏悬浮，列表需要为它预留底部空间
-            body: MediaQuery.removePadding(
-              context: context,
-              removeBottom: true,
-              child: body,
+            body: BottomBarInset(
+              value: barInset,
+              child: MediaQuery.removePadding(
+                context: context,
+                removeBottom: true,
+                child: body,
+              ),
             ),
             extendBody: true,
             bottomNavigationBar: LiquidGlassBar(

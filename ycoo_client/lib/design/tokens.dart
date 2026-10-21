@@ -153,6 +153,19 @@ abstract final class YuanSizes {
   static const barHeight = 64.0;
   static const barBlurSigma = 24.0;
 
+  /// 悬浮底栏总占位高度（不含系统安全区）：
+  /// 上外边距 + 胶囊高度 + 下外边距。
+  static const barTotalHeight = YuanSpace.xxs + barHeight + YuanSpace.barBottom;
+
+  /// 滚动内容为悬浮底栏预留空间时，额外留出的呼吸距离。
+  static const barContentGap = 16.0;
+
+  /// 悬浮底栏需要内容预留的底部高度：安全区 + 胶囊 + 外边距 + 呼吸距离。
+  ///
+  /// [safeBottom] 取 `MediaQuery.viewPadding.bottom`（刘海屏 / 手势条）。
+  static double bottomBarInset(double safeBottom) =>
+      safeBottom + barTotalHeight + barContentGap;
+
   /// 无障碍最小点击区域。
   static const minTapTarget = 48.0;
 

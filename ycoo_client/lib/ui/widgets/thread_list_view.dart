@@ -113,6 +113,8 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    // 悬浮底栏盖在内容之上，列表底部要留出它的高度（二级页面为 0）
+    final barInset = BottomBarInset.of(context);
     if (_initialLoading) return const LoadingList();
     if (_error != null && _items.isEmpty) {
       return ErrorView(message: _error!, onRetry: () => _load(1));
@@ -121,6 +123,7 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
       return RefreshIndicator(
         onRefresh: () => _load(1),
         child: ListView(
+          padding: EdgeInsets.only(bottom: barInset),
           children: [
             if (widget.header != null) widget.header!,
             SizedBox(
@@ -143,7 +146,7 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
           child: ListView.separated(
             controller: _controller,
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+            padding: EdgeInsets.fromLTRB(12, 10, 12, 24 + barInset),
             itemCount: _items.length + 1 + (widget.header != null ? 1 : 0),
             separatorBuilder: (c, i) => const SizedBox(height: 10),
             itemBuilder: (c, index) {
