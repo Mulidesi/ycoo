@@ -3,16 +3,15 @@ name: Android APK
 on:
   push:
     branches: [main]
-    paths:
-      - 'ycoo_client/**'
-      - '.github/workflows/android.yml'
+    # 打 tag（v1.0.10 这种）时构建并发布到 Release
+    tags: ['v*']
   pull_request:
     paths:
       - 'ycoo_client/**'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # 发布 Release 需要写权限
 
 concurrency:
   group: android-${{ github.ref }}
@@ -61,16 +60,35 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
-      - name: Rename artifact
+      - name: Name APK by pubspec version
+        id: apk
         run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           cd build/app/outputs/flutter-apk
           ls -lh
-          cp app-release.apk "ycoo-client-$(date +%Y%m%d)-${{ github.run_number }}.apk"
+          cp app-release.apk "ycoo-client-${VERSION}.apk"
 
-      - name: Upload APK
+      - name: Upload APK (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: ycoo-client-apk
           path: ycoo_client/build/app/outputs/flutter-apk/ycoo-client-*.apk
           if-no-files-found: error
           retention-days: 30
+
+      # 仅在 tag 触发时发布，避免每次 main 提交都产生 Release
+      - name: Publish to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ycoo_client/build/app/outputs/flutter-apk/ycoo-client-*.apk
+          name: ${{ github.ref_name }} — 源论坛客户端
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## 安装包
+
+            - `ycoo-client-${{ steps.apk.outputs.version }}.apk`（Android，minSdk 21）
+            - 支持 ABI：arm64-v8a / armeabi-v7a / x86 / x86_64
+            - 使用 debug 签名，仅供测试
