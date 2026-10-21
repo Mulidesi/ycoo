@@ -28,6 +28,15 @@ String absoluteUrl(String? href) {
   return Uri.parse(kBaseUrl).resolve(href).toString();
 }
 
+/// `div.locked` 里表示「正文真的被挡住了」的措辞。
+///
+/// 购买成功后的信息栏（「付费主题, 价格: 5 星币」）不含这些词，
+/// 借此把「待购买」与「已购买」区分开。
+final RegExp _lockedBlockerRe = RegExp(
+  r'才能浏览|才能查看|才能下载|需向作者支付|回复后才|回复后可见|回复可见'
+  r'|登录后可见|登录后才能|登录后浏览|购买后可见|购买后才能|仅作者可见|需要购买',
+);
+
 String _text(Element? e) => e?.text.replaceAll('\u00a0', ' ').trim() ?? '';
 
 int _toInt(String? s) {
@@ -259,27 +268,44 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
     final lockedEl = contentEl.querySelector('div.locked') ?? p.querySelector('div.locked');
     if (lockedEl != null && isOp) {
       final t = _text(lockedEl);
-      isLocked = true;
-      lockedText ??= t;
-      if (t.contains('回复')) needsReply = true;
-      if (t.contains('购买') || t.contains('支付') || t.contains('星币') || t.contains('金币')) {
-        needsPurchase = true;
-      }
-      if (t.contains('登录')) needsLogin = true;
-
-      // 付费主题：locked 块内有「购买主题」链接，指向
-      // forum.php?mod=misc&action=pay&tid=…&pid=…（showWindow 弹窗），
-      // 价格形如「本主题需向作者支付 <strong>5 星币</strong> 才能浏览」。
       final payLink = lockedEl.querySelector('a[href*="action=pay"]');
-      if (payLink != null) {
-        final href = payLink.attributes['href'];
-        if (href != null && href.isNotEmpty) payUrl = absoluteUrl(href);
+      // 购买成功后站点**仍会输出** <div class="locked">，但内容退化成一条信息栏：
+      //   购买前：<a href="…action=pay…">购买主题</a> 本主题需向作者支付 5 星币 才能浏览
+      //   购买后：<a href="…action=viewpayments…">记录</a> 付费主题, 价格: 5 星币
+      // 后者链接是「购买记录」而非购买入口，正文也已正常回到 #postmessage。
+      // 只按「含『星币』就锁定」会把它误判成仍需购买，导致买完仍提示购买失败。
+      final hasBlockerText = _lockedBlockerRe.hasMatch(t);
+      final infoBarOnly = payLink == null &&
+          !hasBlockerText &&
+          (lockedEl.querySelector('a[href*="action=viewpayments"]') != null ||
+              t.contains('付费主题') ||
+              p.querySelector('[id^="postmessage_"]') != null);
+      if (!infoBarOnly) {
+        isLocked = true;
+        lockedText ??= t;
+        if (t.contains('回复')) needsReply = true;
+        if (payLink != null ||
+            t.contains('购买') ||
+            t.contains('支付') ||
+            t.contains('星币') ||
+            t.contains('金币')) {
+          needsPurchase = true;
+        }
+        if (t.contains('登录')) needsLogin = true;
+
+        // 付费主题：locked 块内有「购买主题」链接，指向
+        // forum.php?mod=misc&action=pay&tid=…&pid=…（showWindow 弹窗），
+        // 价格形如「本主题需向作者支付 <strong>5 星币</strong> 才能浏览」。
+        if (payLink != null) {
+          final href = payLink.attributes['href'];
+          if (href != null && href.isNotEmpty) payUrl = absoluteUrl(href);
+        }
+        final hm = RegExp(r'支付\s*(?:<[^>]+>\s*)*([\d.]+)\s*([^<\s]{1,8})')
+            .firstMatch(lockedEl.innerHtml);
+        if (hm != null) payPriceText = '${hm.group(1)} ${hm.group(2)}';
+        final bm = RegExp(r'已有\s*(\d+)\s*人购买').firstMatch(t);
+        if (bm != null) payBuyers = int.tryParse(bm.group(1)!) ?? 0;
       }
-      final hm = RegExp(r'支付\s*(?:<[^>]+>\s*)*([\d.]+)\s*([^<\s]{1,8})')
-          .firstMatch(lockedEl.innerHtml);
-      if (hm != null) payPriceText = '${hm.group(1)} ${hm.group(2)}';
-      final bm = RegExp(r'已有\s*(\d+)\s*人购买').firstMatch(t);
-      if (bm != null) payBuyers = int.tryParse(bm.group(1)!) ?? 0;
     }
     final noPerm = contentEl.querySelector('div.attach_nopermission') ??
         p.querySelector('div.attach_nopermission');
@@ -523,17 +549,31 @@ String parseAjaxMessage(String body) {
   var text = cdata?.group(1) ?? body;
 
   // succeedhandle_xxx('跳转地址', '提示文本', {...})
+  //
+  // 注意 handlekey 可能为空：站点在 misc&action=pay 提交后返回的是
+  //   succeedhandle_('forum.php?mod=viewthread&tid=…', '主题购买成功 ', {})
+  // 下划线后没有任何字符，所以这里必须是 \w* 而不是 \w+，
+  // 否则「购买成功」会被解析成空串，进而被当成失败。
   final cb = RegExp(
-    r"""succeedhandle_\w+\s*\(\s*(?:'[^']*'|"[^"]*")\s*,\s*'((?:[^'\\]|\\.)*)'""",
+    r"""succeedhandle_\w*\s*\(\s*(?:'[^']*'|"[^"]*")\s*,\s*['"]((?:[^'\\]|\\.)*)['"]""",
   ).firstMatch(text);
   if (cb != null) {
     text = cb.group(1)!.replaceAll(r"\'", "'").replaceAll(r'\"', '"');
   } else {
-    // showmessage('xxx') / showDialog('xxx')
-    final sm = RegExp(
-      r"""(?:showmessage|showDialog|showError|alert)\s*\(\s*'((?:[^'\\]|\\.)*)'""",
+    // errorhandle_xxx('失败原因')：余额不足 / 无权限 / 来路不正确等，
+    // 这类文案必须透传给用户，否则只剩一句「购买失败」。
+    final eb = RegExp(
+      r"""errorhandle_\w*\s*\(\s*['"]((?:[^'"\\]|\\.)*)['"]""",
     ).firstMatch(text);
-    if (sm != null) text = sm.group(1)!.replaceAll(r"\'", "'");
+    if (eb != null) {
+      text = eb.group(1)!.replaceAll(r"\'", "'").replaceAll(r'\"', '"');
+    } else {
+      // showmessage('xxx') / showDialog('xxx')
+      final sm = RegExp(
+        r"""(?:showmessage|showDialog|showError|alert)\s*\(\s*['"]((?:[^'"\\]|\\.)*)['"]""",
+      ).firstMatch(text);
+      if (sm != null) text = sm.group(1)!.replaceAll(r"\'", "'");
+    }
   }
 
   text = text.replaceAll(RegExp(r'<script[\s\S]*?</script>'), ' ');

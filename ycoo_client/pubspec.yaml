@@ -1,7 +1,7 @@
 name: ycoo_client
 description: "源论坛 ycoo.net 多端客户端"
 publish_to: 'none'
-version: 1.0.9+10
+version: 1.0.10+11
 
 environment:
   sdk: ^3.5.4

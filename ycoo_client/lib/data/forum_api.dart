@@ -175,14 +175,17 @@ class ForumApi {
       {
         'formhash': fh,
         'paysubmit': 'yes',
+        'handlekey': 'pay',
         'tid': '${d.tid}',
         'referer': '$kBaseUrl/thread-${d.tid}-1-1.html',
       },
       referer: referer,
     );
     final msg = parseAjaxMessage(r.body);
+    final okByMsg =
+        msg.contains('成功') || msg.contains('已经购买') || msg.contains('购买过');
 
-    // 3. 重新拉帖验证：付费链接消失即视为已解锁
+    // 3. 重新拉帖验证：购买入口消失、正文回到 #postmessage 即视为已解锁
     try {
       final check = await client.get('thread-${d.tid}-1-1.html', referer: '$kBaseUrl/forum.php');
       final re = parseThread(check.body, tid: d.tid, page: 1);
@@ -190,19 +193,20 @@ class ForumApi {
         return BuyResult(
           success: true,
           alreadyOwned: msg.contains('已经购买') || msg.contains('购买过'),
-          message: msg.isEmpty
-              ? '购买成功，内容已解锁'
-              : (msg.contains('成功') || msg.contains('已经购买') ? _shorten(msg) : '购买成功，内容已解锁'),
+          message: okByMsg ? _shorten(msg) : '购买成功，内容已解锁',
         );
       }
-      if (msg.contains('余额') || msg.contains('不足') || msg.contains('积分')) {
-        return BuyResult(success: false, message: _shorten(msg));
-      }
-      if (msg.isNotEmpty && (msg.contains('成功') || msg.contains('已经购买'))) {
-        // 提示成功但页面仍是锁定状态：可能是缓存，交给上层刷新
-        return BuyResult(success: true, message: _shorten(msg));
-      }
-    } catch (_) {}
+    } catch (_) {
+      // 校验只是加分项：拉帖失败时用站点回调文案兜底，别把成功误判成失败
+    }
+
+    // 站点已明确返回成功回调（succeedhandle_*('…', '主题购买成功', {})）
+    if (okByMsg) {
+      return BuyResult(success: true, message: msg.isEmpty ? '购买成功，内容已解锁' : _shorten(msg));
+    }
+    if (msg.contains('余额') || msg.contains('不足') || msg.contains('积分')) {
+      return BuyResult(success: false, message: _shorten(msg));
+    }
 
     return BuyResult(
       success: false,

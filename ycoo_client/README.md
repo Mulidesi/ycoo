@@ -68,6 +68,13 @@
   - `本帖隐藏的内容需要回复才可以浏览` → 回复可见
   - `本主题需向作者支付 N 星币才能浏览` → 购买可见
   - `您需要登录才可以下载或查看` → 登录可见
+- **购买后信息栏（易踩坑）**：购买成功后站点**不会删除** `div.locked`，只是内容退化成
+  `<a href="…action=viewpayments…">记录</a> 付费主题, 价格: 5 星币`，同时正文回到 `#postmessage_`。
+  判定「是否仍需购买」必须看**购买入口 `a[href*=action=pay]` 与阻塞措辞**，不能只看是否含「星币」，
+  否则买完仍会被判成锁定（v1.0.10 修复）。
+- **购买流程**：`GET …mod=misc&action=pay&tid&pid&infloat=yes&handlekey=pay&inajax=1` 取弹窗表单 →
+  按表单 action（`…action=pay&paysubmit=yes&infloat=yes`，需补 `tid`）POST `formhash/paysubmit/handlekey/tid` →
+  响应是 `succeedhandle_('…', '主题购买成功', {})`（**handlekey 为空，下划线后无字符**）。
 - **附件下载**：游客可见 `div.attach_nopermission` 提示，附件真实地址在 `a[href*=attachment]`。
 - **私密版块**：版块列表 `dd` 中出现「私密版块」，未授权用户进入会提示无权限。
 - **正文结构**：`<br>` 分段 + `<img class="zoom">` 图片 + `<a>` 外链 + `<blockquote>` 引用 + `<pre>` 代码。
@@ -325,7 +332,7 @@ GET api/mobile/index.php?version=4&module=forumdisplay&fid={fid}&page={page}
 
 1. **Web 端受浏览器 CORS 限制**：ycoo.net 未返回 `Access-Control-Allow-Origin`，浏览器直连会被拦截；同时浏览器禁止脚本设置 `Cookie` 头，登录态无法在 Web 端保持。**Android / iOS / 桌面端不受影响**。
 2. **验证码**：若站点对低等级账号开启发帖验证码，自动回复会失败并提示「请到网页端回复一次」。
-3. **购买贴**：需要星币购买的主题无法在客户端内支付，会引导到网页端。
+3. **购买贴**：付费主题支持应用内购买（星币扣费走 `misc&action=pay`），余额不足时透传站点原文；若站点风控拦截会提示到网页端购买。
 4. **搜索**：部分关键词/版块要求登录或受频率限制。
 
 ## 九、合规说明

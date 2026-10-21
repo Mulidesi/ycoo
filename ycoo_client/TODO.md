@@ -49,9 +49,23 @@
 - [x] 动态取色：dynamic_color DynamicColorBuilder；「Material You 动态取色」开关（默认开，Android 12+ 壁纸取色覆盖 ColorScheme，语义色 tokens 不变）
 - [x] workmanager 后台周期签到：MainApplication.kt 自定义 WorkManager 配置；登录后注册 4 小时周期任务（回调重建 AppState → autoSignIfNeeded，当日去重），登出/切域名取消；仅 Android
 
-## 完成边界
+## P6 — 付费购买修复（v1.0.10）
 
+- [x] 根因定位（真实抓包 thread-153650）：购买成功后站点**仍保留** `div.locked`，内容退化为
+      `<a href="…action=viewpayments…">记录</a> 付费主题, 价格: 5 星币`。旧逻辑「locked 含星币 → 仍需购买」
+      导致 POST 已成功（`succeedhandle_('…','主题购买成功')`）却提示购买失败、且买完仍显示锁定
+- [x] 解析层：`div.locked` 改为按「购买入口 `a[href*=action=pay]` + 阻塞措辞」判定，
+      已购信息栏（`action=viewpayments` / `付费主题, 价格` / 正文已回到 `#postmessage`）不再算锁定
+- [x] 消息层：`parseAjaxMessage` 支持 `succeedhandle_`（handlekey 为空）与 `errorhandle_*`，
+      购买成功/余额不足等站点原文不再丢成空串
+- [x] 流程层：提交补 `handlekey=pay`；成功判定改为「回调文案 + 重新拉帖」双通道，拉帖异常不再静默吞掉
+- [x] 回归：`test/paid_thread_test.dart`（6 例，含 MockClient 全流程回放）；`tool/pay_check.dart` 改为带期望值的断言脚本
+- [x] 验证：真实抓包样本 5/5 符合预期；`flutter analyze` 0 issue；`flutter test` 17 全过
+- [x] CI：GitHub Actions 自动构建 release APK 并上传 artifact
+
+## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
 - P4 完成 = 附件下载 / 引用折叠 / 收藏版块 / 动态取色 / 后台签到 + analyze 0 issue + 12 测试全过
-- APK 产物：`dist/ycoo-client-1.0.9.apk`
+- P6 完成 = 付费购买修复 + analyze 0 issue + 17 测试全过 + CI 出包
+- APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 由 GitHub Actions 产出
