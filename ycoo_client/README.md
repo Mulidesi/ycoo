@@ -161,10 +161,13 @@ flutter build web --release
 
 ### 已构建产物
 
-| 文件                                              | 说明                                                                                               |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `dist/ycoo-client-1.0.9.apk`                    | Android 正式包（v1.0.9，P4 完成：附件卡片+下载进度、楼中楼引用折叠、收藏板块、Material You 动态取色、后台周期签到） |
-| `build/app/outputs/flutter-apk/app-release.apk` | 原始构建输出（在英文路径构建时生成）                                                                               |
+正式包统一由 GitHub Actions 构建并发布到 [Releases](https://github.com/Mulidesi/ycoo/releases)，推 `v*` tag 自动出包。
+
+| 来源 | 文件 | 说明 |
+| --- | --- | --- |
+| GitHub Release | `ycoo-client-1.0.10.apk` | 当前最新（v1.0.10，修复付费主题购买；versionCode 11，minSdk 21） |
+| 本地构建 | `build/app/outputs/flutter-apk/app-release.apk` | 在英文路径构建时生成 |
+| 历史本地包 | `dist/ycoo-client-1.0.9.apk` | v1.0.9（P4：附件卡片、引用折叠、收藏板块、动态取色、后台签到） |
 
 Windows / macOS / Linux / iOS 的工程目录已生成，但需要对应平台的原生工具链（Visual Studio C++ / Xcode）才能产出安装包。
 
