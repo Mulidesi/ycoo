@@ -63,9 +63,25 @@
 - [x] 验证：真实抓包样本 5/5 符合预期；`flutter analyze` 0 issue；`flutter test` 17 全过
 - [x] CI：GitHub Actions 自动构建 release APK 并上传 artifact
 
+## P7 — 正文排版对齐移动端（v1.0.11）
+
+- [x] 附件小图标过大：`#postmessage` 内 `<ignore_js_op>` 的 `static/image/filetype/*.gif`（16px 行内图标）
+      被当正文图片渲染成整屏问号 → 解析层抽成附件卡片并从正文移除，`_imageUrl` 过滤 filetype 路径
+- [x] 隐藏文案泄漏：`display:none` 的 `.tip`（「点击文件名下载附件」「21 小时前 上传」）被当正文输出 →
+      新增 `_isHidden()`，按 inline style 与 `.tip` 类名跳过
+- [x] 附件行样式：改为单行「文件名  (13.83 KB)」，图标 20→17，与移动端网页一致；
+      下载失败文案移到行下方独立小字，不再挤在文件名下撑高行
+- [x] 大小解析兼容两种模板：`<em class="xg1">(13.83 KB, 下载次数: 531)</em>` 与 `<p>5.92 KB, 下载次数: 6</p>`
+- [x] 空正文误报：附件抽出后 `contentHtml` 只剩空白 → 新增 `_hasVisibleBody()`，
+      只有附件的帖子不再显示「正文需登录或购买后可见」/「（该楼内容不可见）」
+- [x] 回归：`tool/attach_check.dart` 改为断言脚本（含 41 个样本全量扫描，leak=0）；
+      `test/preview_attach.dart` 输出 `goldens/attach_body.png`、`goldens/attach_mixed.png` 供人工比对
+- [x] 验证：`flutter analyze` 0 issue；`flutter test` 17 全过；全样本 168 楼 0 残留
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
 - P4 完成 = 附件下载 / 引用折叠 / 收藏版块 / 动态取色 / 后台签到 + analyze 0 issue + 12 测试全过
 - P6 完成 = 付费购买修复 + analyze 0 issue + 17 测试全过 + CI 出包
-- APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 由 GitHub Actions 产出
+- P7 完成 = 正文排版对齐移动端 + analyze 0 issue + 17 测试全过 + 41 样本 0 残留
+- APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 / v1.0.11 由 GitHub Actions 产出

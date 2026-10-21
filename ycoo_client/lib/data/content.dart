@@ -193,6 +193,17 @@ double? _sizeFromStyle(String? style) {
   return double.parse(m.group(1)!).clamp(10, 30).toDouble();
 }
 
+/// 元素是否被站点用 `display:none` / `visibility:hidden` 藏起来。
+///
+/// Discuz 把附件的悬浮提示（`.tip`）、下拉菜单等留在正文 DOM 里靠样式隐藏，
+/// 只按标签遍历会把「2 小时前 上传 / 点击文件名下载附件」这类文案当正文输出。
+bool _isHidden(Element e) {
+  final style = (e.attributes['style'] ?? '').replaceAll(' ', '').toLowerCase();
+  if (style.contains('display:none') || style.contains('visibility:hidden')) return true;
+  final cls = (e.attributes['class'] ?? '').toLowerCase();
+  return cls == 'tip' || cls.startsWith('tip ') || cls.contains(' tip ');
+}
+
 /// 判断图片是否是可展示的正文图片（过滤占位图、表情、追踪像素）
 String? _imageUrl(Element e) {
   final candidates = [
@@ -211,6 +222,9 @@ String? _imageUrl(Element e) {
     }
     // 表情图片按文本处理没有意义，直接跳过（不影响正文文字）
     if (lower.contains('/static/image/smiley/') || lower.contains('/smiley/')) continue;
+    // 附件文件类型小图标（json.gif / zip.gif / unknown.gif…）是 16px 行内图标，
+    // 当成正文图片渲染会被拉成整屏的「问号」。附件由附件卡片负责展示。
+    if (lower.contains('/static/image/filetype/')) continue;
     return absoluteUrl(src);
   }
   return null;
@@ -349,6 +363,9 @@ class _Builder {
     final cls = node.attributes['class'] ?? '';
     final id = node.attributes['id'] ?? '';
     if (_kSkipTags.contains(tag)) return;
+    // 站点用 display:none 藏起来的辅助节点（附件悬浮提示 .tip、下拉菜单等），
+    // 之前会把「2 小时前 上传 / 点击文件名下载附件」这类文案当正文吐出来。
+    if (_isHidden(node)) return;
     // 隐藏提示由上层决定是否单独展示：楼主楼用横幅，回复楼直接写在正文里
     if (!keepLocked && (cls.contains('locked') || cls.contains('attach_nopermission'))) {
       return;

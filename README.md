@@ -18,6 +18,7 @@
 
 | 版本 | 文件 | 说明 |
 | --- | --- | --- |
+| [v1.0.11](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.11) | `ycoo-client-1.0.11.apk` | 正文排版对齐移动端：附件小图标不再被放大、隐藏提示文案不再泄漏；versionCode 12 |
 | [v1.0.10](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.10) | `ycoo-client-1.0.10.apk` | 修复付费主题购买；versionCode 11 |
 
 - 支持 ABI：`arm64-v8a` / `armeabi-v7a` / `x86` / `x86_64`
@@ -81,6 +82,10 @@
 - **多个 `Set-Cookie` 被逗号拼接**：`expires` 里也含逗号，需按 `,(?=name=)` 切分，否则 Cookie 解析错位导致登录态丢失。
 - **移动端接口会 302**：`?mobile=2` 跳回桌面模板，所以统一按桌面 HTML 解析。
 - **附件图片不在正文里**：登录态下图片附件在兄弟节点 `div.pattl`，`img.src` 是占位图，真实地址在 `zoomfile` / `file`。
+- **文件附件有两处，其中一处会"炸图"**：除了 `div.pattl`，`#postmessage` 里还有 `<ignore_js_op>`，内含 16px 的
+  `static/image/filetype/*.gif` 小图标 + 下载链接 + `display:none` 的 `.tip` 提示。整块当正文渲染会把小图标拉成整屏问号，
+  并漏出「点击文件名下载附件」文案。正确做法是抽成附件卡片后从正文移除，并按 `<em>(13.83 KB, 下载次数: N)</em>`
+  或 `<p>5.92 KB, 下载次数: N</p>` 两种写法解析大小。
 
 ## 构建
 

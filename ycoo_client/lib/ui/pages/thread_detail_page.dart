@@ -315,16 +315,17 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
             ],
           ),
           const SizedBox(height: 16),
-          if (op.contentHtml.trim().isEmpty)
+          // 附件被抽出正文后，contentHtml 可能只剩空白/<br>，不能再当成"正文为空"提示。
+          if (_hasVisibleBody(op))
+            PostContent(html: op.contentHtml, fontSize: YuanType.bodyLg.fontSize!, showLockedHint: false)
+          else if (op.attachments.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
                 '正文需登录或购买后可见，见上方提示',
                 style: theme.textTheme.bodySmall?.copyWith(color: muted),
               ),
-            )
-          else
-            PostContent(html: op.contentHtml, fontSize: YuanType.bodyLg.fontSize!, showLockedHint: false),
+            ),
           if (op.attachments.isNotEmpty) _attachmentList(op.attachments),
           const SizedBox(height: 6),
           Divider(height: YuanSpace.xl, color: semantic.outlineSubtle),
@@ -488,9 +489,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                if (p.contentHtml.trim().isEmpty)
-                  Text('（该楼内容不可见）', style: YuanType.bodySm.copyWith(color: muted))
-                else
+                if (_hasVisibleBody(p))
                   PostContent(
                     html: p.contentHtml,
                     fontSize: YuanType.bodyMd.fontSize!,
@@ -498,7 +497,10 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                     maxImageHeight: 300,
                     showLockedHint: true,
                     collapseQuotes: true,
-                  ),
+                  )
+                else if (p.attachments.isEmpty)
+                  Text('（该楼内容不可见）', style: YuanType.bodySm.copyWith(color: muted)),
+                if (p.attachments.isNotEmpty) _attachmentList(p.attachments),
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -725,6 +727,15 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     }
   }
 
+  /// 该楼是否有可渲染的正文。
+  ///
+  /// 附件块（`<ignore_js_op>`）已从正文抽出，剩下的可能只有空白、`&nbsp;` 或 `<br>`，
+  /// 直接按 `contentHtml.isEmpty` 判断会把「只有附件的帖子」误报成内容不可见。
+  bool _hasVisibleBody(Post p) {
+    if (p.contentHtml.contains('<img')) return true;
+    return contentPlainText(parsePostContent(p.contentHtml, showLockedHint: false)).trim().isNotEmpty;
+  }
+
   Widget _attachmentList(List<PostAttachment> atts) {
     final semantic = YuanSemanticColors.of(context);
     return Container(
@@ -752,36 +763,26 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             children: [
-              Icon(icon, size: 20, color: semantic.brandPrimary),
-              const SizedBox(width: 10),
+              Icon(icon, size: 17, color: semantic.brandPrimary),
+              const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      a.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: YuanType.bodySm.copyWith(fontWeight: FontWeight.w500),
-                    ),
-                    if (state.busy && state.progress == null)
-                      Text('连接中…', style: YuanType.caption.copyWith(color: semantic.textTertiary))
-                    else if (state.busy && state.progress != null)
-                      Text(
-                        '${(state.progress! * 100).toStringAsFixed(0)}%',
-                        style: YuanType.caption.copyWith(color: semantic.textTertiary),
-                      )
-                    else if (state.done)
-                      Text('已保存', style: YuanType.caption.copyWith(color: semantic.success))
-                    else if (state.error != null)
-                      Text(state.error!, maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: YuanType.caption.copyWith(color: semantic.danger))
-                    else
-                      Text(
-                        a.sizeText ?? '点击下载',
-                        style: YuanType.caption.copyWith(color: semantic.textTertiary),
+                // 与论坛移动端一致：文件名与大小同行，「名字 (13.83 KB)」
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: a.name,
+                        style: YuanType.bodySm.copyWith(fontWeight: FontWeight.w500),
                       ),
-                  ],
+                      if (a.sizeText != null)
+                        TextSpan(
+                          text: '  (${a.sizeText})',
+                          style: YuanType.caption.copyWith(color: semantic.textTertiary),
+                        ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
@@ -813,6 +814,19 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
             ],
           ),
         ),
+        if (state.error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                state.error!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: YuanType.caption.copyWith(color: semantic.danger),
+              ),
+            ),
+          ),
         if (state.busy && state.progress != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),

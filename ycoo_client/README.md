@@ -76,6 +76,14 @@
   按表单 action（`…action=pay&paysubmit=yes&infloat=yes`，需补 `tid`）POST `formhash/paysubmit/handlekey/tid` →
   响应是 `succeedhandle_('…', '主题购买成功', {})`（**handlekey 为空，下划线后无字符**）。
 - **附件下载**：游客可见 `div.attach_nopermission` 提示，附件真实地址在 `a[href*=attachment]`。
+- **附件有两种位置（易踩坑）**：
+  1. `div.pattl > dl.tattl dd` —— 图片附件（`img[zoomfile]`）并入正文，纯文件附件做成卡片；
+  2. 直接嵌在 `#postmessage_` 里的 `<ignore_js_op>` —— 内含 **16px 文件类型小图标**
+     （`static/image/filetype/unknown.gif`）+ `<a href*=attachment>` + 大小文本 + `display:none` 的 `.tip` 提示。
+     整块当正文渲染会把小图标拉成整屏问号、还会漏出「点击文件名下载附件」文案（v1.0.11 修复：
+     抽成附件卡片后从正文移除；大小兼容 `<em>(13.83 KB, 下载次数: 531)</em>` 与 `<p>5.92 KB, 下载次数: 6</p>` 两种写法）。
+- **附件抽出后正文可能只剩空白**：判断「正文为空」不能只看 `contentHtml.trim().isEmpty`，
+  要按解析后的纯文本（或含 `<img>`）判断，否则只有附件的帖子会误报「正文需登录或购买后可见」。
 - **私密版块**：版块列表 `dd` 中出现「私密版块」，未授权用户进入会提示无权限。
 - **正文结构**：`<br>` 分段 + `<img class="zoom">` 图片 + `<a>` 外链 + `<blockquote>` 引用 + `<pre>` 代码。
 
@@ -165,7 +173,8 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.0.10.apk` | 当前最新（v1.0.10，修复付费主题购买；versionCode 11，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.11.apk` | 当前最新（v1.0.11，正文排版对齐移动端；versionCode 12，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.10.apk` | v1.0.10（修复付费主题购买；versionCode 11） |
 | 本地构建 | `build/app/outputs/flutter-apk/app-release.apk` | 在英文路径构建时生成 |
 | 历史本地包 | `dist/ycoo-client-1.0.9.apk` | v1.0.9（P4：附件卡片、引用折叠、收藏板块、动态取色、后台签到） |
 
@@ -178,6 +187,7 @@ Windows / macOS / Linux / iOS 的工程目录已生成，但需要对应平台�
 dart run tool/parse_test.dart ../recon     # 版块 / 列表 / 帖子元信息
 dart run tool/parse_check.dart ../recon    # 楼层、楼主、锁定状态
 dart run tool/content_check.dart ../recon  # 正文零丢失校验（文本 + 图片）
+dart run tool/attach_check.dart ../recon   # 附件卡片 + 正文无残留（含全样本扫描）
 
 # 真实站点联调
 dart run tool/live_test.dart            # 只读接口

@@ -39,6 +39,12 @@ final RegExp _lockedBlockerRe = RegExp(
 
 String _text(Element? e) => e?.text.replaceAll('\u00a0', ' ').trim() ?? '';
 
+/// 从附件区文本里抽文件大小，兼容两种模板写法：
+///   `<em class="xg1">(13.83 KB, 下载次数: 531)</em>`
+///   `<p>5.92 KB, 下载次数: 6</p>`
+String? _attachSize(String text) =>
+    RegExp(r'([\d.]+\s*[KMGT]B)').firstMatch(text)?.group(1)?.trim();
+
 int _toInt(String? s) {
   if (s == null) return 0;
   final t = s.replaceAll(RegExp(r'[^\d.万亿]'), '');
@@ -326,11 +332,10 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
     // 登录态下正文附件图片不在 #postmessage 里，而在其兄弟节点 div.pattl
     // （被 <ignore_js_op> 包裹，img.src 是 none.gif 占位图、真实地址在 zoomfile/file）。
     // 只并入 <img>，附件操作文本（下载附件 / 保存到相册 / 文件名大小）不进正文。
-    var bodyHtml = contentEl.innerHtml;
     final pattl = p.querySelector('div.pattl');
     final postAtts = <PostAttachment>[];
+    final attachImgs = <String>[];
     if (pattl != null) {
-      final attachImgs = <String>[];
       // 逐个 <dl class="tattl"> 处理：dd 内有 zoomfile/file <img> 的是图片附件
       // （并入正文渲染），纯文件附件提取下载链接做附件卡片。
       final dds = pattl.querySelectorAll('dl.tattl dd');
@@ -346,11 +351,9 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
         final href = link.attributes['href'];
         if (href == null || href.isEmpty) continue;
         final name = _text(link).isNotEmpty ? _text(link) : '附件';
-        final em = _text(dd.querySelector('em'));
-        final sizeMatch = RegExp(r'\(([^,)]+)').firstMatch(em);
         postAtts.add(PostAttachment(
           name: name,
-          sizeText: sizeMatch?.group(1)?.trim(),
+          sizeText: _attachSize(_text(dd)),
           url: absoluteUrl(href),
         ));
       }
@@ -364,8 +367,37 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
           if (keep) attachImgs.add(img.outerHtml);
         }
       }
-      if (attachImgs.isNotEmpty) bodyHtml += attachImgs.join();
     }
+
+    // comiis 模板还会把附件直接嵌在 #postmessage 里：
+    //   <ignore_js_op>
+    //     <img src="static/image/filetype/unknown.gif" class="vm" />   ← 16px 文件类型小图标
+    //     <span id="attach_165814"><a href="forum.php?mod=attachment&aid=…">名字.json</a>
+    //       <em class="xg1">(13.83 KB, 下载次数: 531)</em></span>
+    //     <div class="tip" style="display:none">…点击文件名下载附件</div>
+    //   </ignore_js_op>
+    // 之前整块当正文渲染：filetype 小图标被放大成整屏问号，隐藏的 tip 文案也漏出来。
+    // 这里抽出附件卡片并从正文里摘掉，渲染交给详情页的附件列表。
+    for (final op in contentEl.querySelectorAll('ignore_js_op')) {
+      // 内联图片附件（img[zoomfile]/img[file]）要保持原样交给正文渲染，不能当文件附件摘掉。
+      if (op.querySelector('img[zoomfile], img[file]') != null) continue;
+      final link = op.querySelector('a[href*="mod=attachment"]');
+      final href = link?.attributes['href'];
+      if (link == null || href == null || href.isEmpty) continue;
+      final url = absoluteUrl(href);
+      if (!postAtts.any((a) => a.url == url)) {
+        final name = _text(link).isNotEmpty ? _text(link) : '附件';
+        postAtts.add(PostAttachment(
+          name: name,
+          sizeText: _attachSize(_text(op)),
+          url: url,
+        ));
+      }
+      op.remove();
+    }
+
+    var bodyHtml = contentEl.innerHtml;
+    if (attachImgs.isNotEmpty) bodyHtml += attachImgs.join();
 
     posts.add(Post(
       pid: pid,
