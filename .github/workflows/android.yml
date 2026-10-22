@@ -21,6 +21,8 @@ jobs:
   build:
     name: Build release APK
     runs-on: ubuntu-latest
+    # 签名密钥保存在 default 环境的 Secrets 中
+    environment: default
     defaults:
       run:
         working-directory: ycoo_client
