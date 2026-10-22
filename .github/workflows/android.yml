@@ -57,8 +57,36 @@ jobs:
       - name: Offline tests
         run: flutter test test/paid_thread_test.dart test/link_resolver_test.dart
 
+      # 正式签名：密钥与口令存放在仓库 Secrets，绝不入库。
+      # 缺少 Secret 时退回 debug 签名，仅用于本地/预发布验证。
+      - name: Configure release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "KEYSTORE_BASE64 未配置，本次使用 debug 签名"
+            exit 0
+          fi
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          {
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storeFile=release.keystore"
+          } > android/key.properties
+          echo "已写入 release 签名配置"
+
       - name: Build release APK
         run: flutter build apk --release
+
+      - name: Verify APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
 
       - name: Name APK by pubspec version
         id: apk
@@ -91,4 +119,4 @@ jobs:
 
             - `ycoo-client-${{ steps.apk.outputs.version }}.apk`（Android，minSdk 21）
             - 支持 ABI：arm64-v8a / armeabi-v7a / x86 / x86_64
-            - 使用 debug 签名，仅供测试
+            - 使用固定 release 签名，可直接覆盖安装后续版本
