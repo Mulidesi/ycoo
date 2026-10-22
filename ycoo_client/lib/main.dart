@@ -9,6 +9,7 @@ import 'core/navigation/in_app_nav.dart';
 import 'state/app_state.dart';
 import 'ui/pages/thread_detail_page.dart';
 import 'ui/pages/thread_list_page.dart';
+import 'ui/pages/user_space_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +17,7 @@ Future<void> main() async {
   registerInAppRoutes(
     thread: (tid) => ThreadDetailPage(tid: tid),
     forum: (fid) => ThreadListPage(fid: fid, name: '版块'),
+    user: (uid) => UserSpacePage(uid: uid),
   );
   // 后台周期签到（workmanager，仅 Android）
   if (Platform.isAndroid) {

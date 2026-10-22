@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/navigation/user_nav.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../widgets/common.dart';
@@ -137,6 +138,11 @@ class _SearchPageState extends State<SearchPage> {
             item: t,
             preview: store.of(t.tid),
             showBoard: true,
+            onAvatarTap: () => openUserFromAvatar(
+              context,
+              uid: t.authorId,
+              username: t.author,
+            ),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => ThreadDetailPage(

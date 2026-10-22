@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import 'net_image.dart';
 
 class Avatar extends StatelessWidget {
-  const Avatar({super.key, this.url, this.size = 38, this.name});
+  const Avatar({super.key, this.url, this.size = 38, this.name, this.onTap});
 
   final String? url;
   final double size;
   final String? name;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -30,18 +31,27 @@ class Avatar extends StatelessWidget {
       ),
     );
 
-    if (url == null || url!.isEmpty) return placeholder;
-    return ClipOval(
-      child: NetImage(
-        url: url!,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        showRetry: false,
-        // 头像失败（含 noavatar.svg）直接回到字母占位，不显示破图
-        errorBuilder: (c) => placeholder,
-        placeholderBuilder: (c) => placeholder,
-      ),
+    Widget child;
+    if (url == null || url!.isEmpty) {
+      child = placeholder;
+    } else {
+      child = ClipOval(
+        child: NetImage(
+          url: url!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          showRetry: false,
+          errorBuilder: (c) => placeholder,
+          placeholderBuilder: (c) => placeholder,
+        ),
+      );
+    }
+    if (onTap == null) return child;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: child,
     );
   }
 }
@@ -186,4 +196,15 @@ String humanNumber(int n) {
     return '${v.toStringAsFixed(v >= 10 ? 0 : 1)}万';
   }
   return '$n';
+}
+
+/// 大数字加千分位，与站点显示一致（1,234 / 12,345）。
+String thousandCount(int v) {
+  final s = v.abs().toString();
+  final buf = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+    buf.write(s[i]);
+  }
+  return v < 0 ? '-$buf' : buf.toString();
 }

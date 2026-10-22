@@ -182,6 +182,9 @@ class UserProfile {
   final String? avatar;
   final String? group;
 
+  /// 等级文案；站点无独立等级时与用户组相同。
+  final String? level;
+
   // ---- 积分体系 ----
   /// 总积分（空间页 / 积分页的「积分」）。
   final int? points;
@@ -234,6 +237,7 @@ class UserProfile {
     required this.username,
     this.avatar,
     this.group,
+    this.level,
     this.points,
     this.coins,
     this.exp,
@@ -252,10 +256,18 @@ class UserProfile {
     this.signature,
   });
 
+  /// 回帖数 = max(0, posts - threads)；缺任一操作数时为 null。
+  int? get replies {
+    if (posts == null || threads == null) return null;
+    final v = posts! - threads!;
+    return v < 0 ? 0 : v;
+  }
+
   UserProfile copyWith({
     String? username,
     String? avatar,
     String? group,
+    String? level,
     int? points,
     int? coins,
     int? exp,
@@ -278,6 +290,7 @@ class UserProfile {
       username: username ?? this.username,
       avatar: avatar ?? this.avatar,
       group: group ?? this.group,
+      level: level ?? this.level,
       points: points ?? this.points,
       coins: coins ?? this.coins,
       exp: exp ?? this.exp,
@@ -307,6 +320,7 @@ class UserProfile {
       username: username.isNotEmpty ? username : other.username,
       avatar: avatar ?? other.avatar,
       group: group ?? other.group,
+      level: level ?? other.level,
       points: points ?? other.points,
       coins: coins ?? other.coins,
       exp: exp ?? other.exp,

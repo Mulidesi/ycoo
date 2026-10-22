@@ -22,8 +22,6 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
-  int _index = 0;
-
   static const _pages = <Widget>[
     FeedPage(),
     BoardsPage(),
@@ -86,11 +84,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       if (uri == null || !st.shouldPromptClipboard(uri.toString())) return;
       if (!mounted) return;
       final match = LinkResolver.resolveInAnySite(uri);
-      final desc = match == null
-          ? '检测到论坛链接，是否在应用内打开？'
-          : (match.target.kind == InAppTargetKind.thread
-              ? '检测到论坛帖子链接，是否在应用内打开？'
-              : '检测到论坛版块链接，是否在应用内打开？');
+      final desc = switch (match?.target.kind) {
+        InAppTargetKind.thread => '检测到论坛帖子链接，是否在应用内打开？',
+        InAppTargetKind.forum => '检测到论坛版块链接，是否在应用内打开？',
+        InAppTargetKind.user => '检测到用户空间链接，是否在应用内打开？',
+        null => '检测到论坛链接，是否在应用内打开？',
+      };
       await st.markClipboardPrompted(uri.toString());
       if (!mounted) return;
       final open = await showDialog<bool>(
@@ -132,10 +131,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final index = context.select<AppState, int>((st) => st.homeTabIndex);
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 900;
-        final body = IndexedStack(index: _index, children: _pages);
+        final body = IndexedStack(index: index, children: _pages);
 
         if (!wide) {
           // 底栏悬浮在内容之上，列表需要为它预留底部空间：
@@ -155,8 +155,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             extendBody: true,
             bottomNavigationBar: LiquidGlassBar(
               destinations: _items,
-              currentIndex: _index,
-              onSelected: (i) => setState(() => _index = i),
+              currentIndex: index,
+              onSelected: (i) => context.read<AppState>().selectHomeTab(i),
               badgeCounts: const {},
             ),
           );
@@ -168,8 +168,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               NavigationRail(
                 extended: constraints.maxWidth >= 1240,
                 minExtendedWidth: 168,
-                selectedIndex: _index,
-                onDestinationSelected: (i) => setState(() => _index = i),
+                selectedIndex: index,
+                onDestinationSelected: (i) => context.read<AppState>().selectHomeTab(i),
                 labelType: constraints.maxWidth >= 1240
                     ? NavigationRailLabelType.none
                     : NavigationRailLabelType.all,

@@ -19,9 +19,11 @@ final Map<InAppTargetKind, _TargetBuilder> _builders = {};
 void registerInAppRoutes({
   required Widget Function(int tid) thread,
   required Widget Function(int fid) forum,
+  Widget Function(int uid)? user,
 }) {
   _builders[InAppTargetKind.thread] = thread;
   _builders[InAppTargetKind.forum] = forum;
+  if (user != null) _builders[InAppTargetKind.user] = user;
 }
 
 /// URL 是否属于任一已知论坛域名，可解析出应用内目标则直接跳转。

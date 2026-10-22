@@ -370,6 +370,52 @@ class ForumApi {
     }
   }
 
+  /// 任意 UID 的公开资料：JSON 优先，空间页 HTML 补用户组 / 等级 / 头像。
+  Future<UserProfile> userProfile(int uid) async {
+    if (uid <= 0) {
+      throw ForumException('该用户不存在或空间不可见');
+    }
+    final results = await Future.wait<Object?>([
+      userStats(uid),
+      client.get(
+        'home.php?mod=space&uid=$uid&do=profile',
+        referer: '$kBaseUrl/home.php?mod=space&uid=$uid',
+      ),
+    ]);
+    final api = results[0] as UserProfile?;
+    final r = results[1] as DResponse;
+    if (isUserSpaceMissing(r.body)) {
+      throw ForumException('该用户不存在或空间不可见');
+    }
+    final html = r.statusCode == 200 ? parseProfile(r.body, fallbackUid: uid) : null;
+    UserProfile? merged = api?.mergeMissingFrom(html) ?? html;
+    if (merged == null) {
+      throw ForumException('未能加载该用户资料');
+    }
+    if (merged.avatar == null || merged.avatar!.contains('noavatar')) {
+      merged = merged.copyWith(avatar: avatarUrlFromUid(uid));
+    }
+    return merged;
+  }
+
+  /// 目标用户发表的主题列表。
+  Future<ThreadPage> userThreads({required int uid, int page = 1}) async {
+    if (uid <= 0) {
+      return const ThreadPage(items: [], page: 1, totalPages: 1);
+    }
+    final r = await client.get(
+      'home.php?mod=space&uid=$uid&do=thread&view=me&from=space&order=dateline&page=$page',
+      referer: '$kBaseUrl/home.php?mod=space&uid=$uid',
+    );
+    if (isUserSpaceMissing(r.body)) {
+      throw ForumException('该用户不存在或空间不可见');
+    }
+    if (isLoginRequired(r.body)) {
+      throw ForumException('登录后才能查看该用户发表的主题');
+    }
+    return parseUserThreadList(r.body, page: page);
+  }
+
   // ---------------------------------------------------------------- 签到
 
   Future<SignStatus> signStatus() async {

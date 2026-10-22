@@ -600,7 +600,8 @@ UserProfile? parseProfileApi(String json, {int? fallbackUid, String? fallbackNam
     return (v == null || v < 0) ? null : v;
   }
 
-  // 头像：member_avatar 是当前登录用户的，noavatar 视为没有
+  // 头像：member_avatar 是当前登录用户的，noavatar 视为没有。
+  // 查看他人时 member_uid != uid，头像留给空间页 HTML 或调用方按 UID 拼接。
   String? avatar;
   final memberAvatar = strOf(vars['member_avatar']);
   final memberUid = numOf(vars['member_uid']);
@@ -610,11 +611,33 @@ UserProfile? parseProfileApi(String json, {int? fallbackUid, String? fallbackNam
     avatar = absoluteUrl(memberAvatar);
   }
 
+  // Variables.group 是当前登录用户的用户组，只在查看自己时可用。
+  String? groupTitle;
+  String? level;
+  final viewingSelf = memberUid == null || memberUid == uid;
+  if (viewingSelf) {
+    final groupMeta = vars['group'];
+    if (groupMeta is Map) {
+      groupTitle = strOf(groupMeta['grouptitle']);
+      final stars = strOf(groupMeta['stars']);
+      if (stars != null && stars.isNotEmpty && stars != '0') {
+        level = 'Lv.$stars';
+      }
+    }
+  }
+  level ??= strOf(space['stars']);
+  if (level != null && RegExp(r'^\d+$').hasMatch(level)) {
+    level = 'Lv.$level';
+  }
+  level ??= groupTitle;
+
   if (uid == 0 && name.isEmpty) return null;
   return UserProfile(
     uid: uid,
     username: name.isEmpty ? '用户' : name,
     avatar: avatar,
+    group: groupTitle,
+    level: level,
     points: numOf(space['credits']),
     coins: credit('星币'),
     exp: credit('经验'),
@@ -631,6 +654,17 @@ UserProfile? parseProfileApi(String json, {int? fallbackUid, String? fallbackNam
     registerTime: strOf(space['regdate']),
     signature: strOf(space['spacedescription']),
   );
+}
+
+/// Discuz 头像路径：uid 补零到 9 位后按 3/2/2/2 切目录。
+String? avatarUrlFromUid(int uid) {
+  if (uid <= 0) return null;
+  final padded = uid.toString().padLeft(9, '0');
+  final a = padded.substring(0, 3);
+  final b = padded.substring(3, 5);
+  final c = padded.substring(5, 7);
+  final d = padded.substring(7, 9);
+  return absoluteUrl('data/avatar/$a/$b/$c/${d}_avatar_middle.jpg');
 }
 
 /// 从任意登录态页面里取当前用户 UID（Discuz 每页都注入 `discuz_uid = '31981'`）。
@@ -667,6 +701,8 @@ UserProfile? parseProfile(String html, {int? fallbackUid, String? fallbackName})
   }
 
   final group = pick(RegExp(r'用户组[:：\s]*([^\s\n]{2,16})'));
+  final levelRaw = pick(RegExp(r'等级[:：\s]*([^\s\n]{1,16})'));
+  final level = (levelRaw == null || levelRaw.isEmpty) ? group : levelRaw;
   final reg = pick(RegExp(r'注册时间[:：\s]*([\d]{4}-\d{1,2}-\d{1,2})'));
 
   // 积分页：「星币: 2026」「经验: 8456」「贡献: 1506」「积分: 9207 ( 总积分= … )」
@@ -685,8 +721,14 @@ UserProfile? parseProfile(String html, {int? fallbackUid, String? fallbackName})
   final onlineHours = pickInt(RegExp(r'在线时间[:：\s]*([\d,]+)\s*小时'));
   final views = pickInt(RegExp(r'空间访问量[:：\s]*([\d,]+)'));
 
-  final avatarImg = doc.querySelector('img.user_avatar, .avt img');
-  final avatar = avatarImg?.attributes['src'];
+  // 页面头部可能先出现游客自己的 noavatar 占位图，必须跳过，取真正的头像。
+  String? avatar;
+  for (final img in doc.querySelectorAll('img.user_avatar, .kmavt img, .avt img')) {
+    final src = img.attributes['src'];
+    if (src == null || src.isEmpty || src.contains('noavatar')) continue;
+    avatar = src;
+    break;
+  }
 
   if (uid == 0 && name.isEmpty) return null;
   return UserProfile(
@@ -694,6 +736,7 @@ UserProfile? parseProfile(String html, {int? fallbackUid, String? fallbackName})
     username: name.isEmpty ? (fallbackName ?? '用户') : name,
     avatar: avatar == null ? null : absoluteUrl(avatar),
     group: group,
+    level: level,
     points: points,
     coins: coins,
     exp: exp,
@@ -708,6 +751,56 @@ UserProfile? parseProfile(String html, {int? fallbackUid, String? fallbackName})
     views: views,
     registerTime: reg,
   );
+}
+
+/// 空间页要求登录（游客访问他人主题列表时站点返回该提示）。
+bool isLoginRequired(String html) {
+  return html.contains('请先登录后才能继续浏览') || html.contains('您需要登录后才可以');
+}
+
+/// 空间页提示用户不存在或空间不可见。
+bool isUserSpaceMissing(String html) {
+  return html.contains('您指定的用户空间不存在') ||
+      html.contains('用户不存在') ||
+      html.contains('空间不存在') ||
+      html.contains('抱歉，您指定的用户不存在') ||
+      html.contains('该用户已禁止使用') ||
+      (html.contains('没有权限') && html.contains('空间'));
+}
+
+/// 用户空间主题列表。优先复用版块列表解析；空间页常用 `div.xl` / `li` + `a[href*="thread-"]`。
+ThreadPage parseUserThreadList(String html, {int page = 1}) {
+  final fromBoard = parseThreadList(html, page: page);
+  if (fromBoard.items.isNotEmpty) return fromBoard;
+
+  final doc = html_parser.parse(html);
+  final items = <ThreadItem>[];
+  final seen = <int>{};
+  for (final a in doc.querySelectorAll('a[href*="thread-"]')) {
+    final href = a.attributes['href'] ?? '';
+    final m = RegExp(r'thread-(\d+)').firstMatch(href);
+    if (m == null) continue;
+    final tid = int.tryParse(m.group(1)!) ?? 0;
+    if (tid == 0 || seen.contains(tid)) continue;
+    var title = _text(a);
+    if (title.isEmpty) title = (a.attributes['title'] ?? '').trim();
+    if (title.isEmpty) continue;
+    if (title.contains('下一页') || title.contains('上一页') || title == '查看') continue;
+    seen.add(tid);
+
+    final li = a.parent;
+    final timeText = _text(li?.querySelector('.xg1, .time, em, span.xs0'));
+    items.add(ThreadItem(
+      tid: tid,
+      title: title,
+      url: absoluteUrl(href),
+      timeText: timeText.isEmpty ? null : timeText,
+    ));
+  }
+
+  var total = _parseTotalPages(doc, page);
+  if (items.isEmpty) total = 1;
+  return ThreadPage(items: items, page: page, totalPages: total);
 }
 
 /// 解析 Discuz inajax XML 的提示文本。

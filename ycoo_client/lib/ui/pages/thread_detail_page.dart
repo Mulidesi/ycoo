@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/discuz_client.dart';
+import '../../core/navigation/user_nav.dart';
 import '../../core/services/download_service.dart';
 import '../../data/content.dart';
 import '../../design/tokens.dart';
@@ -286,7 +287,16 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
           const SizedBox(height: 14),
           Row(
             children: [
-              Avatar(url: op.avatar, name: op.author, size: YuanSizes.avatarThreadBody * 0.72),
+              Avatar(
+                url: op.avatar,
+                name: op.author,
+                size: YuanSizes.avatarThreadBody * 0.72,
+                onTap: () => openUserFromAvatar(
+                  context,
+                  uid: op.authorId,
+                  username: op.author,
+                ),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -463,7 +473,16 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Avatar(url: p.avatar, name: p.author, size: YuanSizes.avatarReply * 0.84),
+          Avatar(
+            url: p.avatar,
+            name: p.author,
+            size: YuanSizes.avatarReply * 0.84,
+            onTap: () => openUserFromAvatar(
+              context,
+              uid: p.authorId,
+              username: p.author,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

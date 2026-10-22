@@ -17,12 +17,14 @@ class ThreadTile extends StatelessWidget {
     super.key,
     required this.item,
     required this.onTap,
+    this.onAvatarTap,
     this.preview,
     this.showBoard = false,
   });
 
   final ThreadItem item;
   final VoidCallback onTap;
+  final VoidCallback? onAvatarTap;
   final ThreadPreview? preview;
   final bool showBoard;
 
@@ -79,7 +81,12 @@ class ThreadTile extends StatelessWidget {
   Widget _authorRow(BuildContext context, ThemeData theme, Color muted) {
     return Row(
       children: [
-        Avatar(url: item.avatar, name: item.author, size: YuanSizes.avatarReply * 0.94),
+        Avatar(
+          url: item.avatar,
+          name: item.author,
+          size: YuanSizes.avatarReply * 0.94,
+          onTap: onAvatarTap,
+        ),
         const SizedBox(width: 9),
         Expanded(
           child: Column(

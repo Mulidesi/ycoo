@@ -10,6 +10,9 @@ enum InAppTargetKind {
 
   /// 版块列表。
   forum,
+
+  /// 用户个人中心。
+  user,
 }
 
 /// 应用内跳转目标。
@@ -80,6 +83,19 @@ abstract final class LinkResolver {
       if (m != null) {
         final int? fid = int.tryParse(m.group(1)!);
         if (fid != null) return InAppTarget(kind: InAppTargetKind.forum, id: fid);
+      }
+    }
+
+    final RegExpMatch? pathUser = RegExp(r'space-uid-(\d+)').firstMatch(path);
+    if (pathUser != null) {
+      final int? uid = int.tryParse(pathUser.group(1)!);
+      if (uid != null && uid > 0) return InAppTarget(kind: InAppTargetKind.user, id: uid);
+    }
+    if (path.contains('home.php') || query.contains('mod=space')) {
+      final RegExpMatch? m = RegExp(r'(?:^|&)uid=(\d+)').firstMatch(query);
+      if (m != null) {
+        final int? uid = int.tryParse(m.group(1)!);
+        if (uid != null && uid > 0) return InAppTarget(kind: InAppTargetKind.user, id: uid);
       }
     }
 

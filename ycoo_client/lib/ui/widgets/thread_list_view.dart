@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/navigation/user_nav.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../state/preview_store.dart';
@@ -161,6 +162,11 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
                 item: item,
                 preview: store.of(item.tid),
                 showBoard: widget.showBoard,
+                onAvatarTap: () => openUserFromAvatar(
+                  context,
+                  uid: item.authorId,
+                  username: item.author,
+                ),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => ThreadDetailPage(

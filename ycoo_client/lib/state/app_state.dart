@@ -223,6 +223,9 @@ class AppState extends ChangeNotifier {
   bool signing = false;
   String? bootError;
 
+  /// 主框架当前 Tab：0 首页 / 1 版块 / 2 我的。
+  int homeTabIndex = 0;
+
   DateTime? lastSignAt;
   int lastAutoReplyCount = 0;
 
@@ -233,6 +236,12 @@ class AppState extends ChangeNotifier {
   bool get loggedIn => user != null;
   bool get hasAutoRepliedToday => _todayReplyCount() > 0;
   int get todayReplyCount => _todayReplyCount();
+
+  void selectHomeTab(int index) {
+    if (index < 0 || index > 2 || index == homeTabIndex) return;
+    homeTabIndex = index;
+    notifyListeners();
+  }
 
   /// 当前主站点（设置里可切换 ycoo / sysbbs 域名）。
   ForumSite get site => ForumSite.byId(settings.siteId);
