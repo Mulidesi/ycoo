@@ -34,3 +34,5 @@ desktop.ini
 
 # --- 本地助手数据 ---
 .workbuddy-ai/
+# 聊天附件缓存（可能含 keystore 等敏感内容）
+.monkeycode-tmp-files/
