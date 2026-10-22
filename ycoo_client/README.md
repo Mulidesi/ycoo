@@ -58,6 +58,8 @@
 | 版块列表  | `GET forum.php`                                                                                  | 解析 `h2[gid]` + `div#category_*` + `dl`                                                    |
 | 帖子列表  | `GET forum-{fid}-{page}.html`                                                                    | 解析 `li.kmlist` / `li[id^=normalthread_]`                                                  |
 | 帖子详情  | `GET thread-{tid}-{page}-1.html`                                                                 | 解析 `div[id^=post_]`、`#postmessage_*`、`div.locked`                                         |
+| 发帖页   | `GET forum.php?mod=post&action=newthread&fid={fid}`                                               | 解析 `form#postform` 的 action、`formhash`、`posttime`、`typeid` 分类                            |
+| 发帖    | `POST` 发帖页 action + `&inajax=1`                                                                 | `formhash` `posttime` `subject` `message` `typeid` `usesig=1` `wysiwyg=0`                    |
 | 回复    | 按页面 `form#fastpostform` 的 action 原样提交 + `&inajax=1`                                              | `formhash` `message` `subject` `usesig` `posttime`                                        |
 | 签到状态  | `GET k_misign-sign.html`                                                                         | 已签到标记：`.btnvisted` + 「您的签到排名」                                                             |
 | 执行签到  | `POST plugin.php?id=k_misign:sign&operation=qiandao&format=button&formhash=xx`                   | 返回 `签到成功` / `今日已签`                                                                        |
@@ -147,10 +149,12 @@ lib/
 | 模块   | 能力                                        |
 | ---- | ----------------------------------------- |
 | 登录   | 账号/UID/邮箱、安全提问、记住密码、登录失败提示剩余次数、Cookie 免登录 |
-| 首页   | 最新发表 / 热门 / 回复 / 精华 四个信息流，下拉刷新 + 触底加载     |
+| 首页   | 最新发表 / 热门 / 回复 / 精华 四个信息流，下拉刷新 + 触底加载；再点底栏「首页」刷新当前信息流 |
 | 版块   | 分组折叠式浏览、今日新增、主题/帖数、私密标识、搜索入口              |
 | 帖子列表 | 置顶/分类标签、附件标识、作者与回复/查看数、分页加载               |
 | 帖子阅读 | 富文本渲染、图片预览、楼层列表、楼层跳页、复制正文/链接、浏览器打开        |
+| 发帖   | 选版块与主题分类、标题/正文编辑、Discuz BBCode、审核状态提示、发布后直达新主题          |
+| 过滤   | 按标题关键词隐藏帖子，默认过滤「打卡」，可在「我的」中增删关键词或关闭 |
 | 隐藏内容 | 回复可见/购买可见/登录可见 分类提示；自动回复解锁                |
 | 签到   | 状态、连续天数、今日人数、排名、奖励、自动签到开关                 |
 | 我的   | 头像/用户组/积分/主题/回帖/好友、自动回复内容与限额、清除记录、退出登录    |
@@ -180,8 +184,10 @@ flutter build linux --release
 flutter build web --release
 ```
 
-> 项目路径含中文时，Gradle 需要 `android/gradle.properties` 中的 `android.overridePathCheck=true`（已内置）。>   
-> 但 Dart AOT 快照器在中文路径下仍会失败（`app.dill` 读取乱码），**Android 发布包请把工程复制到纯英文路径再构建**，例如 `C:\Users\Administrator\build\ycoo_client`。>   
+> 项目路径含中文时，Gradle 需要 `android/gradle.properties` 中的 `android.overridePathCheck=true`（已内置）。
+>
+> 但 Dart AOT 快照器在中文路径下仍会失败（`app.dill` 读取乱码），**Android 发布包请把工程复制到纯英文路径再构建**，例如 `C:\Users\Administrator\build\ycoo_client`。
+>
 > 国内环境建议使用镜像：`PUB_HOSTED_URL=https://pub.flutter-io.cn`、`FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn`。
 
 ### 已构建产物
@@ -280,9 +286,12 @@ flutter test --update-goldens test/golden_preview_test.dart  # 生成版式预�
 
 ### 2. 自动回帖与手动回帖都提示「回复失败」
 
-**根因**：回复其实**已经发送成功**，是客户端把成功响应当成了失败。Discuz 的 `inajax` 成功响应是  
-`<root><![CDATA[<script>succeedhandle_fastpost('url', '回复发布成功…', {...})</script>]]></root>`，  
-而 `parseAjaxMessage` 先删掉了整段 `<script>` 再取文本，得到空串 → 落到兜底分支「回复失败」。  
+**根因**：回复其实**已经发送成功**，是客户端把成功响应当成了失败。Discuz 的 `inajax` 成功响应是
+
+`<root><![CDATA[<script>succeedhandle_fastpost('url', '回复发布成功…', {...})</script>]]></root>`，
+
+而 `parseAjaxMessage` 先删掉了整段 `<script>` 再取文本，得到空串 → 落到兜底分支「回复失败」。
+
 同时旧代码提交的 URL 缺 `handlekey` / `infloat` / `posttime`，与页面表单不一致。
 
 **修复**：
@@ -333,7 +342,8 @@ flutter test --update-goldens test/golden_preview_test.dart  # 生成版式预�
 
 ### 1. 列表卡片：首图 + 摘要
 
-版块列表 / 导读页的 HTML **只有头像，没有首图和摘要**，所以早期列表只能显示标题。  
+版块列表 / 导读页的 HTML **只有头像，没有首图和摘要**，所以早期列表只能显示标题。
+
 排查时发现站点开放了 Discuz 移动端接口：
 
 ```

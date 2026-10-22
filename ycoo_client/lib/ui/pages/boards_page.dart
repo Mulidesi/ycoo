@@ -5,6 +5,7 @@ import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../widgets/common.dart';
 import '../widgets/net_image.dart';
+import 'new_thread_page.dart';
 import 'search_page.dart';
 import 'thread_list_page.dart';
 
@@ -66,6 +67,13 @@ class _BoardsPageState extends State<BoardsPage> with AutomaticKeepAliveClientMi
       appBar: AppBar(
         title: const Text('版块'),
         actions: [
+          IconButton(
+            tooltip: '发帖',
+            onPressed: () async {
+              if (await openNewThreadFlow(context) && mounted) _load();
+            },
+            icon: const Icon(Icons.edit_note_rounded),
+          ),
           IconButton(
             tooltip: '搜索',
             onPressed: () => Navigator.of(context).push(

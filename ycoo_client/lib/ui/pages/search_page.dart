@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/navigation/user_nav.dart';
+import '../../core/utils/content_filter.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../widgets/common.dart';
@@ -125,15 +126,32 @@ class _SearchPageState extends State<SearchPage> {
     if (_items!.isEmpty) {
       return const EmptyView(message: '没有找到相关帖子', icon: Icons.search_off_rounded);
     }
+    final filter = context.select<AppState, ({bool enabled, List<String> keywords})>(
+      (st) => (
+        enabled: st.settings.postFilterEnabled,
+        keywords: st.settings.postFilterKeywords,
+      ),
+    );
+    final visible = filterThreadsByKeywords(
+      _items!,
+      enabled: filter.enabled,
+      keywords: filter.keywords,
+    );
+    if (visible.isEmpty) {
+      return EmptyView(
+        message: '已过滤 ${_items!.length} 条关键词帖子',
+        icon: Icons.filter_alt_off_rounded,
+      );
+    }
     final store = context.read<AppState>().previews;
     return AnimatedBuilder(
       animation: store,
       builder: (c, _) => ListView.separated(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
-        itemCount: _items!.length,
+        itemCount: visible.length,
         separatorBuilder: (c, i) => const SizedBox(height: 10),
         itemBuilder: (c, i) {
-          final t = _items![i];
+          final t = visible[i];
           return ThreadTile(
             item: t,
             preview: store.of(t.tid),

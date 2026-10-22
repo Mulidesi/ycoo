@@ -63,6 +63,15 @@ class AppSettings {
   /// 收藏的版块 fid（本地持久化）。
   List<int> favoriteFids;
 
+  /// 是否按标题关键词过滤帖子（默认开启，过滤「打卡」类无效帖）。
+  bool postFilterEnabled;
+
+  /// 帖子标题过滤关键词；用户可在设置里增删，空列表表示不隐藏任何帖子。
+  List<String> postFilterKeywords;
+
+  /// 首次启动 / 旧版本升级时默认过滤的关键词。
+  static const List<String> defaultPostFilterKeywords = <String>['打卡'];
+
   /// Material You 动态取色开关（Android 12+ 生效，其余平台忽略）。
   bool dynamicColor;
 
@@ -80,10 +89,15 @@ class AppSettings {
     this.siteId = 'ycoo',
     this.clipboardDetect = true,
     List<int>? favoriteFids,
+    this.postFilterEnabled = true,
+    List<String>? postFilterKeywords,
     this.dynamicColor = true,
   })  : replyPresets = _seedPresets(replyPresets),
         replyWhitelist = replyWhitelist ?? <int>{},
-        favoriteFids = favoriteFids ?? <int>[];
+        favoriteFids = favoriteFids ?? <int>[],
+        postFilterKeywords = postFilterKeywords == null
+            ? List<String>.of(defaultPostFilterKeywords)
+            : sanitizePostFilterKeywords(postFilterKeywords);
 
   /// 预设初始化：空列表（首次启动 / 老版本没有该字段 / 被清空）时补默认值，
   /// 保证自动回复任何时候都有内容可发。
@@ -101,6 +115,21 @@ class AppSettings {
       return List<String>.of(defaultReplyPresets);
     }
     return cleaned;
+  }
+
+  /// 归一化关键词：去空白、忽略大小写去重、单条限长 30、最多 50 条。
+  static List<String> sanitizePostFilterKeywords(Iterable<String> raw) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final item in raw) {
+      final t = item.trim();
+      if (t.isEmpty || t.length > 30) continue;
+      final key = t.toLowerCase();
+      if (!seen.add(key)) continue;
+      out.add(t);
+      if (out.length >= 50) break;
+    }
+    return out;
   }
 
   /// 归一化后的有效预设（去空、去重、限长、最多 5 条）。
@@ -144,6 +173,8 @@ class AppSettings {
         'siteId': siteId,
         'clipboardDetect': clipboardDetect,
         'favoriteFids': favoriteFids,
+        'postFilterEnabled': postFilterEnabled,
+        'postFilterKeywords': postFilterKeywords,
         'dynamicColor': dynamicColor,
       };
 
@@ -177,6 +208,10 @@ class AppSettings {
       siteId: j['siteId'] as String? ?? 'ycoo',
       clipboardDetect: j['clipboardDetect'] as bool? ?? true,
       favoriteFids: ((j['favoriteFids'] as List?) ?? []).map((e) => e as int).toList(),
+      postFilterEnabled: j['postFilterEnabled'] as bool? ?? true,
+      postFilterKeywords: (j['postFilterKeywords'] as List?)
+          ?.map((e) => e.toString())
+          .toList(),
       dynamicColor: j['dynamicColor'] as bool? ?? true,
     );
   }
@@ -226,6 +261,9 @@ class AppState extends ChangeNotifier {
   /// 主框架当前 Tab：0 首页 / 1 版块 / 2 我的。
   int homeTabIndex = 0;
 
+  /// 点击底栏「首页」时递增，首页据此刷新当前信息流。
+  int homeRefreshTick = 0;
+
   DateTime? lastSignAt;
   int lastAutoReplyCount = 0;
 
@@ -238,7 +276,15 @@ class AppState extends ChangeNotifier {
   int get todayReplyCount => _todayReplyCount();
 
   void selectHomeTab(int index) {
-    if (index < 0 || index > 2 || index == homeTabIndex) return;
+    if (index < 0 || index > 2) return;
+    // 重复点击「首页」也要刷新：递增信号，让首页重新请求当前信息流。
+    if (index == 0) {
+      homeTabIndex = 0;
+      homeRefreshTick++;
+      notifyListeners();
+      return;
+    }
+    if (index == homeTabIndex) return;
     homeTabIndex = index;
     notifyListeners();
   }

@@ -374,6 +374,53 @@ class ReplyResult {
   const ReplyResult({required this.success, required this.message, this.needCaptcha = false});
 }
 
+/// 发帖表单里的「主题分类」选项（Discuz `typeid`）。
+class ThreadCategory {
+  final int id;
+  final String name;
+
+  const ThreadCategory({required this.id, required this.name});
+}
+
+/// 发帖页 `form#postform` 的真实提交信息。
+///
+/// Discuz 会校验 `formhash` + `posttime`，并用表单 action 里写死的
+/// `extra` / `topicsubmit` 判断来路，所以不能自己拼一个干净的 URL。
+class PostForm {
+  final bool canPost;
+  final String? action;
+  final String? formhash;
+  final String? posttime;
+  final List<ThreadCategory> categories;
+  final String? notice;
+
+  const PostForm({
+    required this.canPost,
+    this.action,
+    this.formhash,
+    this.posttime,
+    this.categories = const <ThreadCategory>[],
+    this.notice,
+  });
+}
+
+/// 发帖结果。`tid` 用于发布成功后直接打开新主题。
+class NewThreadResult {
+  final bool success;
+  final String message;
+  final int? tid;
+  final bool pending;
+  final bool needCaptcha;
+
+  const NewThreadResult({
+    required this.success,
+    required this.message,
+    this.tid,
+    this.pending = false,
+    this.needCaptcha = false,
+  });
+}
+
 class LoginResult {
   final bool success;
   final String message;

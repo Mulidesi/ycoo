@@ -281,6 +281,75 @@ class ForumApi {
     );
   }
 
+  // ---------------------------------------------------------------- 发帖
+
+  /// 打开版块发帖页，取 `form#postform` 的 action、formhash、posttime 与分类。
+  Future<PostForm> newThreadForm(int fid) async {
+    final page = await client.get(
+      'forum.php?mod=post&action=newthread&fid=$fid',
+      referer: '$kBaseUrl/forum-$fid-1.html',
+    );
+    if (looksLoggedOut(page.body)) {
+      return const PostForm(
+        canPost: false,
+        notice: '登录状态已失效，请重新登录',
+      );
+    }
+    return parsePostForm(page.body);
+  }
+
+  /// 发表新主题。
+  ///
+  /// 与回复一样必须复用页面表单里的 action（含 `extra` / `topicsubmit`）
+  /// 和 `formhash` / `posttime`，否则 Discuz 会判定「来路不正确」。
+  Future<NewThreadResult> postNewThread({
+    required int fid,
+    required String subject,
+    required String message,
+    int? typeId,
+  }) async {
+    final title = subject.trim();
+    if (title.isEmpty) {
+      return const NewThreadResult(success: false, message: '请填写标题');
+    }
+    if (message.trim().isEmpty) {
+      return const NewThreadResult(success: false, message: '请填写正文');
+    }
+
+    final form = await newThreadForm(fid);
+    if (!form.canPost) {
+      return NewThreadResult(
+        success: false,
+        message: form.notice ?? '当前账号在该版块没有发帖权限',
+      );
+    }
+    final fh = form.formhash;
+    if (fh == null || fh.isEmpty) {
+      return const NewThreadResult(success: false, message: '无法获取发帖令牌，请刷新后重试');
+    }
+
+    final baseAction = form.action ??
+        'forum.php?mod=post&action=newthread&fid=$fid&extra=&topicsubmit=yes';
+    final url =
+        baseAction.contains('inajax=') ? baseAction : '$baseAction&inajax=1';
+
+    final r = await client.post(
+      url,
+      {
+        'formhash': fh,
+        if (form.posttime != null) 'posttime': form.posttime!,
+        'subject': title,
+        'message': message,
+        'typeid': '${typeId ?? 0}',
+        'usesig': '1',
+        'wysiwyg': '0',
+        'save': '',
+      },
+      referer: '$kBaseUrl/forum.php?mod=post&action=newthread&fid=$fid',
+    );
+    return parseNewThreadResult(r.body);
+  }
+
   // ---------------------------------------------------------------- 账号
 
   Future<LoginResult> login(

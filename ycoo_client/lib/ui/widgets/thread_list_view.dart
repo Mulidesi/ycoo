@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/navigation/user_nav.dart';
+import '../../core/utils/content_filter.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../state/preview_store.dart';
@@ -37,7 +38,8 @@ class ThreadListView extends StatefulWidget {
   State<ThreadListView> createState() => _ThreadListViewState();
 }
 
-class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAliveClientMixin {
+class _ThreadListViewState extends State<ThreadListView>
+    with AutomaticKeepAliveClientMixin {
   final _items = <ThreadItem>[];
   final _controller = ScrollController();
   int _page = 0;
@@ -74,7 +76,9 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
   void _onScroll() {
     if (!_controller.hasClients) return;
     final pos = _controller.position;
-    if (pos.pixels >= pos.maxScrollExtent - 420 && !_loading && _page < _totalPages) {
+    if (pos.pixels >= pos.maxScrollExtent - 420 &&
+        !_loading &&
+        _page < _totalPages) {
       _load(_page + 1);
     }
   }
@@ -90,7 +94,8 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
       if (!mounted) return;
       setState(() {
         if (page == 1) _items.clear();
-        _items.addAll(res.items.where((e) => !_items.any((x) => x.tid == e.tid)));
+        _items
+            .addAll(res.items.where((e) => !_items.any((x) => x.tid == e.tid)));
         _page = res.page;
         _totalPages = res.totalPages;
         _initialLoading = false;
@@ -120,7 +125,21 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
     if (_error != null && _items.isEmpty) {
       return ErrorView(message: _error!, onRetry: () => _load(1));
     }
-    if (_items.isEmpty) {
+    final filter =
+        context.select<AppState, ({bool enabled, List<String> keywords})>(
+      (st) => (
+        enabled: st.settings.postFilterEnabled,
+        keywords: st.settings.postFilterKeywords,
+      ),
+    );
+    final visible = filterThreadsByKeywords(
+      _items,
+      enabled: filter.enabled,
+      keywords: filter.keywords,
+    );
+    final hiddenCount = _items.length - visible.length;
+    if (visible.isEmpty) {
+      final canLoadMore = _items.isNotEmpty && _page < _totalPages;
       return RefreshIndicator(
         onRefresh: () => _load(1),
         child: ListView(
@@ -128,9 +147,23 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
           children: [
             if (widget.header != null) widget.header!,
             SizedBox(
-              height: 320,
-              child: EmptyView(message: widget.emptyText),
+              height: canLoadMore ? 260 : 320,
+              child: EmptyView(
+                message: _items.isEmpty
+                    ? widget.emptyText
+                    : '本页 ${_items.length} 条已全部被关键词过滤',
+                icon: _items.isEmpty
+                    ? Icons.forum_outlined
+                    : Icons.filter_alt_off_rounded,
+              ),
             ),
+            if (canLoadMore)
+              Center(
+                child: TextButton(
+                  onPressed: _loading ? null : () => _load(_page + 1),
+                  child: const Text('加载下一页'),
+                ),
+              ),
           ],
         ),
       );
@@ -148,7 +181,7 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
             controller: _controller,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(12, 10, 12, 24 + barInset),
-            itemCount: _items.length + 1 + (widget.header != null ? 1 : 0),
+            itemCount: visible.length + 1 + (widget.header != null ? 1 : 0),
             separatorBuilder: (c, i) => const SizedBox(height: 10),
             itemBuilder: (c, index) {
               var i = index;
@@ -156,8 +189,8 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
                 if (i == 0) return widget.header!;
                 i -= 1;
               }
-              if (i == _items.length) return _footer();
-              final item = _items[i];
+              if (i == visible.length) return _footer(hiddenCount);
+              final item = visible[i];
               return ThreadTile(
                 item: item,
                 preview: store.of(item.tid),
@@ -185,19 +218,36 @@ class _ThreadListViewState extends State<ThreadListView> with AutomaticKeepAlive
     );
   }
 
-  Widget _footer() {
+  Widget _footer(int hiddenCount) {
     if (_page >= _totalPages) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 18),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
         child: Center(
-          child: Text('已经到底了', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          child: Text(
+            hiddenCount > 0 ? '已过滤 $hiddenCount 条 · 已经到底了' : '已经到底了',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
         ),
       );
     }
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 18),
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 18),
+        child: Center(
+          child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Center(
-        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+        child: TextButton(
+          onPressed: () => _load(_page + 1),
+          child: Text(hiddenCount > 0 ? '已过滤 $hiddenCount 条 · 加载更多' : '加载更多'),
+        ),
       ),
     );
   }

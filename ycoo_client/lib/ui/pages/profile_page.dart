@@ -10,6 +10,7 @@ import '../../platform/apk_installer.dart';
 import '../../state/app_state.dart';
 import '../widgets/common.dart';
 import 'image_diag_page.dart';
+import 'post_filter_page.dart';
 import 'sign_page.dart';
 import 'site_settings_page.dart';
 import 'update_page.dart';
@@ -173,6 +174,23 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
             padding: EdgeInsets.zero,
             child: Column(
               children: [
+                ListTile(
+                  leading: const _TileIcon(Icons.filter_alt_rounded, Color(0xFF8B5CF6)),
+                  title: const Text('帖子关键词过滤', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  subtitle: Text(
+                    '${st.settings.postFilterEnabled ? '已开启' : '已关闭'} · '
+                    '${st.settings.postFilterKeywords.length} 个关键词'
+                    '${st.settings.postFilterKeywords.isEmpty ? '' : ' · ${st.settings.postFilterKeywords.join('、')}'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11.5),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PostFilterPage()),
+                  ),
+                ),
+                const Divider(indent: 56),
                 ListTile(
                   leading: const _TileIcon(Icons.dns_rounded, Color(0xFF0EA5E9)),
                   title: const Text('站点与网络', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),

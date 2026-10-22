@@ -894,6 +894,109 @@ String parseAjaxMessage(String body) {
   );
 }
 
+/// 发帖表单：`form#postform` 的 action、令牌与主题分类。
+///
+/// 无权限 / 未登录 / 版块关闭时页面里没有 postform，此时 `canPost` 为 false，
+/// 并尽量把站点提示（「抱歉，您没有权限…」）带出来。
+PostForm parsePostForm(String html) {
+  final doc = html_parser.parse(html);
+  final form = doc.querySelector('form#postform');
+  if (form == null) {
+    return PostForm(canPost: false, notice: parsePostNotice(html));
+  }
+
+  String? hidden(String name) =>
+      form.querySelector('input[name="$name"]')?.attributes['value'];
+
+  final categories = <ThreadCategory>[];
+  for (final opt in form.querySelectorAll('select#typeid option')) {
+    final id = int.tryParse((opt.attributes['value'] ?? '').trim()) ?? 0;
+    if (id <= 0) continue;
+    final name = _text(opt).replaceAll(RegExp(r'\s+'), ' ');
+    if (name.isEmpty) continue;
+    categories.add(ThreadCategory(id: id, name: name));
+  }
+
+  final action = form.attributes['action']?.replaceAll('&amp;', '&');
+  return PostForm(
+    canPost: action != null && action.isNotEmpty,
+    action: action,
+    formhash: hidden('formhash') ?? parseFormhash(html),
+    posttime: hidden('posttime'),
+    categories: categories,
+  );
+}
+
+/// 从发帖页提取站点提示（通常位于 `div.alert_error` / `#messagetext`）。
+String? parsePostNotice(String html) {
+  final doc = html_parser.parse(html);
+  const selectors = <String>[
+    'div.alert_error',
+    'div.alert_info',
+    'div#messagetext',
+    'div.message',
+    'p.alert_error',
+  ];
+  for (final sel in selectors) {
+    final text = _text(doc.querySelector(sel)).replaceAll(RegExp(r'\s+'), ' ');
+    if (text.isNotEmpty) return text;
+  }
+  final m = RegExp(r'(?:抱歉|对不起)[^<]{0,160}').firstMatch(html);
+  return m?.group(0)?.replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+/// 解析 `forum.php?mod=post&action=newthread` 的 AJAX 返回。
+///
+/// 成功时站点返回 `succeedhandle_newthread('forum.php?mod=viewthread&tid=…', '帖子发布成功', {...})`；
+/// 需要审核时同样走成功回调，只是文案里带「审核」。
+NewThreadResult parseNewThreadResult(String body) {
+  final msg = parseAjaxMessage(body);
+
+  int? tid;
+  final cb = RegExp(
+    r"""succeedhandle_\w*\s*\(\s*['"]([^'"]*)['"]""",
+  ).firstMatch(body);
+  if (cb != null) {
+    tid = int.tryParse(
+      RegExp(r'tid=(\d+)').firstMatch(cb.group(1)!)?.group(1) ?? '',
+    );
+  }
+  tid ??= int.tryParse(
+    RegExp(r"""['"]tid['"]\s*:\s*['"]?(\d+)""").firstMatch(body)?.group(1) ??
+        '',
+  );
+
+  final callbackOk = RegExp(
+    r'succeedhandle_(?:newthread|post)\b',
+  ).hasMatch(body);
+  final pending = msg.contains('审核');
+  final ok = callbackOk ||
+      (tid != null && (msg.contains('发布成功') || msg.contains('发表成功')));
+
+  if (ok) {
+    return NewThreadResult(
+      success: true,
+      message: pending ? '主题已提交，等待审核通过' : '发布成功',
+      tid: tid,
+      pending: pending,
+    );
+  }
+  if (msg.contains('验证码') || msg.contains('seccode') || msg.contains('安全验证')) {
+    return const NewThreadResult(
+      success: false,
+      message: '站点要求输入验证码，请到网页端发帖一次后重试',
+      needCaptcha: true,
+    );
+  }
+  if (msg.contains('登录') || msg.contains('游客')) {
+    return const NewThreadResult(success: false, message: '登录状态已失效，请重新登录');
+  }
+  return NewThreadResult(
+    success: false,
+    message: msg.isEmpty ? '发布失败，站点未返回提示，请稍后重试' : msg,
+  );
+}
+
 int parseRemainingAttempts(String message) {
   final m = RegExp(r'还可以尝试\s*(\d+)\s*次').firstMatch(message);
   return m == null ? -1 : int.parse(m.group(1)!);
