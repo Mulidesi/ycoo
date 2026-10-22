@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -159,11 +160,25 @@ class UpdateService {
     }
   }
 
+  /// GitHub / 加速线路不一定返回 charset，`http.Response.body` 会按
+  /// latin1 解码，中文说明就会变成乱码。优先用响应头里的编码，
+  /// 没有声明时按 JSON 规范使用 UTF-8。
   static String _decodeBody(http.Response res) {
+    final contentType = res.headers['content-type'] ?? '';
+    final match = RegExp(r'charset\s*=\s*"?([^;"\s]+)', caseSensitive: false)
+        .firstMatch(contentType);
+    final declared = match == null ? null : Encoding.getByName(match.group(1)!);
+    if (declared != null) {
+      try {
+        return declared.decode(res.bodyBytes);
+      } catch (_) {
+        // 声明与实际内容不符时继续按 UTF-8 尝试
+      }
+    }
     try {
-      return res.body;
+      return utf8.decode(res.bodyBytes);
     } catch (_) {
-      return String.fromCharCodes(res.bodyBytes);
+      return latin1.decode(res.bodyBytes);
     }
   }
 

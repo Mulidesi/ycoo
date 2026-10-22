@@ -149,6 +149,26 @@ void main() {
   });
 
   group('更新检查线路', () {
+    test('latest.json 未声明 charset 时中文说明不乱码', () async {
+      final body = jsonEncode({
+        'version': '1.0.18',
+        'apk_url':
+            'https://github.com/Mulidesi/ycoo/releases/download/v1.0.18/ycoo-client-1.0.18.apk',
+        'size': 100,
+        'notes': '## 修复\n- 隐藏贴标识与自动回复',
+      });
+      final client = MockClient((_) async => http.Response.bytes(
+            utf8.encode(body),
+            200,
+            headers: const {'content-type': 'application/json'},
+          ));
+      final service = UpdateService(client: client);
+      final info = await service.fetchLatest();
+      expect(info.notes, contains('隐藏贴标识与自动回复'));
+      expect(info.plainNotes, contains('• 隐藏贴标识与自动回复'));
+      service.close();
+    });
+
     test('加速线路失败时回退直连', () async {
       final calls = <String>[];
       final client = MockClient((request) async {

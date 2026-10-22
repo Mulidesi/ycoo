@@ -281,16 +281,22 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
       //   购买后：<a href="…action=viewpayments…">记录</a> 付费主题, 价格: 5 星币
       // 后者链接是「购买记录」而非购买入口，正文也已正常回到 #postmessage。
       // 只按「含『星币』就锁定」会把它误判成仍需购买，导致买完仍提示购买失败。
-      final hasBlockerText = _lockedBlockerRe.hasMatch(t);
+      final hasReplyLink =
+          lockedEl.querySelector('a[href*="action=reply"]') != null;
+      final hasBlockerText = _lockedBlockerRe.hasMatch(t) ||
+          t.contains('隐藏内容') ||
+          (hasReplyLink && t.contains('回复'));
+      // 已购信息栏的 locked 在正文外，链接是购买记录而非购买入口；
+      // 不能用「存在 #postmessage」判断，否则回复可见的 locked 嵌在正文里
+      // 会被误当成已购信息栏，隐藏标识和自动回复都会失效。
       final infoBarOnly = payLink == null &&
           !hasBlockerText &&
           (lockedEl.querySelector('a[href*="action=viewpayments"]') != null ||
-              t.contains('付费主题') ||
-              p.querySelector('[id^="postmessage_"]') != null);
+              t.contains('付费主题'));
       if (!infoBarOnly) {
         isLocked = true;
         lockedText ??= t;
-        if (t.contains('回复')) needsReply = true;
+        if (t.contains('回复') || hasReplyLink) needsReply = true;
         if (payLink != null ||
             t.contains('购买') ||
             t.contains('支付') ||
