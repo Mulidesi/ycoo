@@ -190,7 +190,8 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.0.16.apk` | 当前最新（v1.0.16，回复输入框不再被键盘遮挡 + 默认头像显示；versionCode 17，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.17.apk` | 当前最新（v1.0.17，应用内 GitHub Release 更新 + 国内加速下载 + SHA-256 校验；versionCode 18，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.16.apk` | v1.0.16（回复输入框不再被键盘遮挡 + 默认头像显示；versionCode 17） |
 | GitHub Release | `ycoo-client-1.0.15.apk` | v1.0.15（固定 release 签名，可直接覆盖安装；versionCode 16） |
 | GitHub Release | `ycoo-client-1.0.14.apk` | v1.0.14（点击头像查看用户个人中心与主题列表；versionCode 15） |
 | GitHub Release | `ycoo-client-1.0.13.apk` | v1.0.13（自动回复预设默认初始化 + 底栏不遮挡列表；versionCode 14） |
@@ -201,6 +202,16 @@ flutter build web --release
 | 历史本地包 | `dist/ycoo-client-1.0.9.apk` | v1.0.9（P4：附件卡片、引用折叠、收藏板块、动态取色、后台签到） |
 
 Windows / macOS / Linux / iOS 的工程目录已生成，但需要对应平台的原生工具链（Visual Studio C++ / Xcode）才能产出安装包。
+
+### 应用内更新
+
+Android 端「我的 → 通用 → 检查更新」会读取最新 Release 的 `latest.json`，与当前 `versionName` 比较后下载安装：
+
+- 元数据优先 `https://gproxy.mulides.cc.cd/` 加速线路，失败回退 `github.com` / `api.github.com` 直连
+- APK 下载同样先加速后直连，按 `size` / `sha256` 校验，只接受 GitHub 域名下的 HTTPS 地址
+- 安装通过 `FileProvider` + `ACTION_VIEW` 调起系统安装器；Android 8+ 需允许「安装未知应用」
+- 相关代码：`lib/data/update_manifest.dart`、`lib/core/update_service.dart`、`lib/ui/pages/update_page.dart`、`android/.../MainActivity.kt`
+- CI 在 tag 构建时生成并上传 `latest.json`，与 APK 同属一个 Release
 
 ### 离线自测
 

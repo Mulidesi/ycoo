@@ -51,3 +51,11 @@ Entries discovered by the Agent during task execution should follow this format:
   - 发布流程：先递增 `ycoo_client/pubspec.yaml` 的 versionCode（`+N`），再推 `vX.Y.Z` tag；只有 tag 触发才会发布到 Release。
   - 签名校验：CI 日志中的 `apksigner verify --print-certs`，或下载 APK 解包 `META-INF/CERT.RSA` 后用 `openssl pkcs7 -inform DER -print_certs` + `openssl x509 -fingerprint -sha256` 比对。
   - 当前 GitHub App 令牌没有 secrets 写权限，无法通过 API 写入 Secrets，需要用户在仓库网页添加。
+
+[Project Knowledge Summary]
+- Date: 2026-10-22
+- Context: Discovered by Agent while implementing the in-app GitHub update feature
+- Category: Build Methods
+- Instructions:
+  - 本机没有 Android SDK（`flutter doctor` 报 `Unable to locate Android SDK`），无法本地 `flutter build apk`；Android 构建与签名验证只能在 GitHub Actions 完成，本地以 `flutter analyze` + `flutter test` 为准。
+  - 本地增删依赖会因缺少 `PUB_HOSTED_URL` 把 `pubspec.lock` 的记录地址从镜像改写为 pub.dev；改完依赖执行 `PUB_HOSTED_URL=https://pub.flutter-io.cn flutter pub get` 恢复镜像地址。

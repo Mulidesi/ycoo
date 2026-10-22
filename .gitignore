@@ -36,3 +36,5 @@ desktop.ini
 .workbuddy-ai/
 # 聊天附件缓存（可能含 keystore 等敏感内容）
 .monkeycode-tmp-files/
+# CI 生成的更新元数据（仅随 Release 上传）
+/ycoo_client/latest.json

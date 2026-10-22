@@ -18,6 +18,7 @@
 
 | 版本 | 文件 | 说明 |
 | --- | --- | --- |
+| [v1.0.17](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.17) | `ycoo-client-1.0.17.apk` | 内置 GitHub Release 更新：应用内检查新版本、国内加速下载、SHA-256 校验后安装；versionCode 18 |
 | [v1.0.16](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.16) | `ycoo-client-1.0.16.apk` | 回复输入框不再被键盘遮挡；无自定义头像统一显示站点默认头像；versionCode 17 |
 | [v1.0.15](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.15) | `ycoo-client-1.0.15.apk` | 固定 release 签名，后续版本可直接覆盖安装；versionCode 16 |
 | [v1.0.14](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.14) | `ycoo-client-1.0.14.apk` | 支持点击头像查看用户个人中心与主题列表；versionCode 15 |
@@ -29,6 +30,15 @@
 - 支持 ABI：`arm64-v8a` / `armeabi-v7a` / `x86` / `x86_64`
 - 使用固定 release 签名，可直接覆盖安装后续版本，**仅供个人测试**，请勿二次分发
 - iOS / 桌面端需自行用对应工具链构建（见下方「构建」）
+
+### 应用内更新
+
+Android 端在「我的 → 通用 → 检查更新」中读取最新 Release 的 `latest.json`，对比版本后可直接下载安装：
+
+- 元数据与 APK 均优先使用 GitHub 加速线路 `https://gproxy.mulides.cc.cd/`，失败自动回退直连
+- 安装包按 Release 提供的 `size` 与 `sha256` 校验，且只接受 GitHub 域名的 HTTPS 地址
+- 下载完成后通过 `FileProvider` 调起系统安装器；Android 8+ 首次使用需允许「安装未知应用」
+- 仅支持 Android；iOS 受系统限制，不提供应用内安装
 
 ## 功能
 
@@ -46,6 +56,7 @@
 | 我的 | 星币 / 经验 / 积分（积分页）+ 帖子 / 关注 / 粉丝（空间页），取自移动端接口，与站点数值一致 |
 | 自动化 | 隐藏贴自动回复：预设默认初始化（5 条，可改可恢复默认）、随机延时、按 tid 去重、每日限额、版块白名单 |
 | 站点 | 主域名切换（`ycoo.net` ↔ `pc.sysbbs.com`）、站内链接应用内跳转、剪贴板链接识别 |
+| 更新 | 「我的 → 检查更新」读取 GitHub Release 元数据，安装包优先走国内加速线路下载，校验大小与 SHA-256 后调起系统安装器 |
 | 外观 | Material 3 亮/暗主题、Material You 动态取色（Android 12+）、悬浮液态玻璃底栏 |
 
 ## 技术栈

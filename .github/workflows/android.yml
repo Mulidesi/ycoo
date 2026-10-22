@@ -57,7 +57,7 @@ jobs:
 
       # 只跑离线测试：live_image_test 依赖线上图片，CI 里不稳定
       - name: Offline tests
-        run: flutter test test/paid_thread_test.dart test/link_resolver_test.dart
+        run: flutter test test/paid_thread_test.dart test/link_resolver_test.dart test/update_manifest_test.dart test/update_service_test.dart test/update_page_test.dart
 
       # 正式签名：密钥与口令存放在仓库 Secrets，绝不入库。
       # 缺少 Secret 时退回 debug 签名，仅用于本地/预发布验证。
@@ -107,12 +107,50 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # 随 Release 上传 latest.json，供 App 内更新读取版本 / APK / 校验值
+      - name: Generate update manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${{ steps.apk.outputs.version }}"
+          APK="build/app/outputs/flutter-apk/ycoo-client-${VERSION}.apk"
+          SIZE=$(stat -c%s "$APK")
+          SHA=$(sha256sum "$APK" | awk '{print $1}')
+          python3 - "$VERSION" "$SIZE" "$SHA" <<'PY'
+          import json
+          import sys
+
+          version, size, sha = sys.argv[1], sys.argv[2], sys.argv[3]
+          tag = f"v{version}"
+          notes = (
+              "## 安装包\n\n"
+              f"- `ycoo-client-{version}.apk`（Android，minSdk 21）\n"
+              "- 支持 ABI：arm64-v8a / armeabi-v7a / x86 / x86_64\n"
+              "- 使用固定 release 签名，可直接覆盖安装后续版本"
+          )
+          manifest = {
+              "version": version,
+              "tag": tag,
+              "apk_url": (
+                  f"https://github.com/Mulidesi/ycoo/releases/download/"
+                  f"{tag}/ycoo-client-{version}.apk"
+              ),
+              "size": int(size),
+              "sha256": sha,
+              "notes": notes,
+          }
+          with open("latest.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+          PY
+          cat latest.json
+
       # 仅在 tag 触发时发布，避免每次 main 提交都产生 Release
       - name: Publish to Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ycoo_client/build/app/outputs/flutter-apk/ycoo-client-*.apk
+          files: |
+            ycoo_client/build/app/outputs/flutter-apk/ycoo-client-*.apk
+            ycoo_client/latest.json
           name: ${{ github.ref_name }} — 源论坛客户端
           generate_release_notes: true
           fail_on_unmatched_files: true

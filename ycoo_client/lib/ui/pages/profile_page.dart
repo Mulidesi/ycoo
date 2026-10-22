@@ -6,11 +6,13 @@ import '../../core/storage/automation_models.dart' show Preset;
 import '../../data/parsers.dart';
 import '../../design/tokens.dart';
 import '../../models/models.dart';
+import '../../platform/apk_installer.dart';
 import '../../state/app_state.dart';
 import '../widgets/common.dart';
 import 'image_diag_page.dart';
 import 'sign_page.dart';
 import 'site_settings_page.dart';
+import 'update_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -20,8 +22,22 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClientMixin {
+  String? _version;
+
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final version = await ApkInstaller().currentVersion();
+    if (!mounted) return;
+    setState(() => _version = version);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +185,19 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                     MaterialPageRoute(builder: (_) => const SiteSettingsPage()),
                   ),
                 ),
+                const Divider(indent: 56),
+                ListTile(
+                  leading: const _TileIcon(Icons.system_update_rounded, YuanColors.brandPrimaryLight),
+                  title: const Text('检查更新', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  subtitle: Text(
+                    '当前 v${_version ?? '—'} · 从 GitHub Release 获取最新安装包',
+                    style: const TextStyle(fontSize: 11.5),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const UpdatePage()),
+                  ),
+                ),
               ],
             ),
           ),
@@ -234,7 +263,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
           const SizedBox(height: 20),
           Center(
             child: Text(
-              '源坛 v1.0.9 · 第三方客户端\n与源论坛官方无关，数据版权归源论坛及原作者所有',
+              '源坛 v${_version ?? '—'} · 第三方客户端\n与源论坛官方无关，数据版权归源论坛及原作者所有',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 fontSize: 11,

@@ -1,7 +1,7 @@
 name: ycoo_client
 description: "源论坛 ycoo.net 多端客户端"
 publish_to: 'none'
-version: 1.0.16+17
+version: 1.0.17+18
 
 environment:
   sdk: ^3.5.4
@@ -19,6 +19,8 @@ dependencies:
   # 1.8+ 的 Kotlin DSL 构建脚本要求更新的 Gradle/Kotlin，与 Flutter 3.24.5 模板不兼容，锁 1.7.0
   dynamic_color: 1.7.0
   workmanager: ^0.5.2
+  # 应用内更新：校验 Release 提供的 APK SHA-256
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
