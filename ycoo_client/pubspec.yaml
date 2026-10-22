@@ -1,7 +1,7 @@
 name: ycoo_client
 description: "源论坛 ycoo.net 多端客户端"
 publish_to: 'none'
-version: 1.0.15+16
+version: 1.0.16+17
 
 environment:
   sdk: ^3.5.4
@@ -27,3 +27,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/

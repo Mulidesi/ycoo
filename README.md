@@ -18,13 +18,16 @@
 
 | 版本 | 文件 | 说明 |
 | --- | --- | --- |
+| [v1.0.16](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.16) | `ycoo-client-1.0.16.apk` | 回复输入框不再被键盘遮挡；无自定义头像统一显示站点默认头像；versionCode 17 |
+| [v1.0.15](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.15) | `ycoo-client-1.0.15.apk` | 固定 release 签名，后续版本可直接覆盖安装；versionCode 16 |
+| [v1.0.14](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.14) | `ycoo-client-1.0.14.apk` | 支持点击头像查看用户个人中心与主题列表；versionCode 15 |
 | [v1.0.13](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.13) | `ycoo-client-1.0.13.apk` | 自动回复预设默认初始化；悬浮底栏不再遮挡列表末条；versionCode 14 |
 | [v1.0.12](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.12) | `ycoo-client-1.0.12.apk` | 「我的」页积分/帖子/关注/粉丝改为接口取值，与站点一致；versionCode 13 |
 | [v1.0.11](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.11) | `ycoo-client-1.0.11.apk` | 正文排版对齐移动端：附件小图标不再被放大、隐藏提示文案不再泄漏；versionCode 12 |
 | [v1.0.10](https://github.com/Mulidesi/ycoo/releases/tag/v1.0.10) | `ycoo-client-1.0.10.apk` | 修复付费主题购买；versionCode 11 |
 
 - 支持 ABI：`arm64-v8a` / `armeabi-v7a` / `x86` / `x86_64`
-- 使用 debug 签名，**仅供个人测试**，请勿二次分发
+- 使用固定 release 签名，可直接覆盖安装后续版本，**仅供个人测试**，请勿二次分发
 - iOS / 桌面端需自行用对应工具链构建（见下方「构建」）
 
 ## 功能

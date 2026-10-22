@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'net_image.dart';
 
+/// 站点 `noavatar.svg` 的位图版本，用于没有自定义头像的用户。
+///
+/// 论坛默认头像是 SVG，Flutter 无法解码；站点同时提供同尺寸的
+/// `static/image/common/tavatar.gif`，内置一份作为位图兜底。
+const String defaultAvatarAsset = 'assets/images/default_avatar.gif';
+
 class Avatar extends StatelessWidget {
   const Avatar({super.key, this.url, this.size = 38, this.name, this.onTap});
 
@@ -31,9 +37,22 @@ class Avatar extends StatelessWidget {
       ),
     );
 
+    Widget defaultAvatar() => ClipOval(
+          child: Image.asset(
+            defaultAvatarAsset,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => placeholder,
+          ),
+        );
+
+    final lower = url?.toLowerCase() ?? '';
+    final needsDefault = lower.isEmpty || lower.contains('noavatar') || lower.endsWith('.svg');
+
     Widget child;
-    if (url == null || url!.isEmpty) {
-      child = placeholder;
+    if (needsDefault) {
+      child = defaultAvatar();
     } else {
       child = ClipOval(
         child: NetImage(
@@ -42,7 +61,7 @@ class Avatar extends StatelessWidget {
           height: size,
           fit: BoxFit.cover,
           showRetry: false,
-          errorBuilder: (c) => placeholder,
+          errorBuilder: (c) => defaultAvatar(),
           placeholderBuilder: (c) => placeholder,
         ),
       );

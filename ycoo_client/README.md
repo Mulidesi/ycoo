@@ -190,7 +190,10 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.0.13.apk` | 当前最新（v1.0.13，自动回复预设默认初始化 + 底栏不遮挡列表；versionCode 14，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.16.apk` | 当前最新（v1.0.16，回复输入框不再被键盘遮挡 + 默认头像显示；versionCode 17，minSdk 21） |
+| GitHub Release | `ycoo-client-1.0.15.apk` | v1.0.15（固定 release 签名，可直接覆盖安装；versionCode 16） |
+| GitHub Release | `ycoo-client-1.0.14.apk` | v1.0.14（点击头像查看用户个人中心与主题列表；versionCode 15） |
+| GitHub Release | `ycoo-client-1.0.13.apk` | v1.0.13（自动回复预设默认初始化 + 底栏不遮挡列表；versionCode 14） |
 | GitHub Release | `ycoo-client-1.0.12.apk` | v1.0.12（「我的」页积分/统计改为接口取值；versionCode 13） |
 | GitHub Release | `ycoo-client-1.0.11.apk` | v1.0.11（正文排版对齐移动端；versionCode 12） |
 | GitHub Release | `ycoo-client-1.0.10.apk` | v1.0.10（修复付费主题购买；versionCode 11） |

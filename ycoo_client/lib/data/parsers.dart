@@ -675,6 +675,20 @@ int? parseDiscuzUid(String html) {
   return (uid == null || uid <= 0) ? null : uid;
 }
 
+/// 顶部用户菜单里的头像属于**当前登录用户**，不是被查看用户，必须排除。
+///
+/// comiis 模板把当前用户头像放在 `#comiis_user_menu` / `.comiis_user_info`，
+/// 标准模板放在 `#um`，两者都渲染在 `img.user_avatar` 上。
+bool _insideUserMenu(Element img) {
+  for (Element? e = img.parent; e != null; e = e.parent) {
+    if (e.id == 'comiis_user_menu' || e.id == 'um') return true;
+    final cls = e.className;
+    if (cls.contains('comiis_user_info') || cls.contains('comiis_headb')) return true;
+    if (e.localName == 'a' && cls.contains('nvtx')) return true;
+  }
+  return false;
+}
+
 /// HTML 兜底解析（移动端接口不可用时）。
 ///
 /// 兼容两个页面：
@@ -722,10 +736,12 @@ UserProfile? parseProfile(String html, {int? fallbackUid, String? fallbackName})
   final views = pickInt(RegExp(r'空间访问量[:：\s]*([\d,]+)'));
 
   // 页面头部可能先出现游客自己的 noavatar 占位图，必须跳过，取真正的头像。
+  // 登录后头部会显示当前登录用户（而非被查看用户）的头像，同样要跳过。
   String? avatar;
   for (final img in doc.querySelectorAll('img.user_avatar, .kmavt img, .avt img')) {
     final src = img.attributes['src'];
     if (src == null || src.isEmpty || src.contains('noavatar')) continue;
+    if (_insideUserMenu(img)) continue;
     avatar = src;
     break;
   }

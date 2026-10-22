@@ -203,8 +203,14 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
           ),
         ],
       ),
-      body: _buildBody(theme, d),
-      bottomNavigationBar: loggedIn && d != null ? _replyBar(theme) : null,
+      body: Column(
+        children: [
+          Expanded(child: _buildBody(theme, d)),
+          // 输入条必须放在 body 内，随键盘弹出一起上移。
+          // 放在 bottomNavigationBar 时，edge-to-edge 设备上会被输入法完全盖住。
+          if (loggedIn && d != null) _replyBar(theme),
+        ],
+      ),
     );
   }
 

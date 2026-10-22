@@ -140,6 +140,44 @@ void main() {
       expect(p.avatar, contains('/data/avatar/000/03/19/81_avatar_middle.jpg'));
       expect(p.avatar, isNot(contains('noavatar')));
     });
+
+    test('跳过顶部菜单里当前登录用户的头像', () {
+      const html = '''
+<html><body>
+  <div id="comiis_user_menu">
+    <div class="comiis_user_info">
+      <a class="nvtx" href="space-uid-1.html">
+        <img class="user_avatar" src="./data/avatar/000/00/00/01_avatar_middle.jpg" />
+      </a>
+    </div>
+  </div>
+  <div class="kmavt">
+    <a href="space-uid-31981.html">
+      <img class="user_avatar" src="./data/avatar/000/03/19/81_avatar_middle.jpg" />
+    </a>
+  </div>
+</body></html>
+''';
+      final p = parseProfile(html, fallbackUid: 31981, fallbackName: '木里得斯')!;
+      expect(p.avatar, contains('/data/avatar/000/03/19/81_avatar_middle.jpg'));
+      expect(p.avatar, isNot(contains('/000/00/00/01_')));
+    });
+
+    test('只有顶部菜单头像时不把它当成目标用户头像', () {
+      const html = '''
+<html><body>
+  <div id="comiis_user_menu">
+    <div class="comiis_user_info">
+      <a class="nvtx" href="space-uid-1.html">
+        <img class="user_avatar" src="./data/avatar/000/00/00/01_avatar_middle.jpg" />
+      </a>
+    </div>
+  </div>
+</body></html>
+''';
+      final p = parseProfile(html, fallbackUid: 31981, fallbackName: '木里得斯')!;
+      expect(p.avatar, isNull);
+    });
   });
 
   group('avatarUrlFromUid', () {
