@@ -131,10 +131,10 @@
 
 ## P11 — v1.1.0 发布构建修复（v1.1.1）
 
-- [ ] Android 工具链对齐 Flutter 3.41.9 模板：Gradle 8.14 / AGP 8.11.1 / Kotlin 2.2.20 / JDK 17（原 8.3 / 8.1.0 / 1.8.22 触发 CI 的 AGP 最低版本检查）
-- [ ] `workmanager` 0.5.2 → 0.10.10：旧版使用已被 Flutter 3.41 移除的 v1 embedding API，Android 无法编译
-- [ ] 新增 `tool/patch_flutter_gradle_plugin.sh`：修复 Flutter 3.41.9 Gradle 插件的 `com.android.Version` 编译期引用与 `:gradle:jar` 重复类问题，CI 构建前执行
-- [ ] 本地 `flutter build apk --release` 通过，推 v1.1.1 tag 后 CI 出包
+- [x] Android 工具链对齐 Flutter 3.41.9 模板：Gradle 8.14 / AGP 8.11.1 / Kotlin 2.2.20 / JDK 17（原 8.3 / 8.1.0 / 1.8.22 触发 CI 的 AGP 最低版本检查）
+- [x] `workmanager` 0.5.2 → 0.10.10：旧版使用已被 Flutter 3.41 移除的 v1 embedding API，Android 无法编译
+- [x] 新增 `tool/patch_flutter_gradle_plugin.sh`：修复 Flutter 3.41.9 Gradle 插件的 `com.android.Version` 编译期引用与 `:gradle:jar` 重复类问题，CI 构建前执行
+- [x] 本地 `flutter build apk --release` 通过（59.1MB），推 v1.1.1 tag 后 CI 出包并发布 Release
 - 完成 = analyze 0 issue + 全量测试全过 + CI 产出 `ycoo-client-1.1.1.apk`
 
 ## 完成边界
