@@ -15,10 +15,7 @@ const String kBgCheckinTask = 'net.ycoo.ycoo_client.autoCheckin';
 
 /// main.dart 启动时调用一次（仅 Android）。
 Future<void> initBackgroundCheckin() async {
-  await Workmanager().initialize(
-    callbackDispatcher,
-    isInDebugMode: false,
-  );
+  await Workmanager().initialize(callbackDispatcher);
 }
 
 /// 登录后注册周期任务。
@@ -28,7 +25,7 @@ Future<void> registerBackgroundCheckin() async {
     kBgCheckinTask,
     frequency: const Duration(hours: 4),
     constraints: Constraints(networkType: NetworkType.connected),
-    existingWorkPolicy: ExistingWorkPolicy.keep,
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
   );
 }
 

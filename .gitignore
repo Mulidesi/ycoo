@@ -8,6 +8,7 @@
 /ycoo_client/.flutter-plugins
 /ycoo_client/.flutter-plugins-dependencies
 /ycoo_client/android/.gradle/
+/ycoo_client/android/build/
 /ycoo_client/android/local.properties
 /ycoo_client/android/key.properties
 /ycoo_client/**/*.keystore

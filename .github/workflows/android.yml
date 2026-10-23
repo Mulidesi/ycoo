@@ -49,6 +49,11 @@ jobs:
           flutter --version
           java -version
 
+      # Flutter 3.41.9 的 Gradle 插件源码在 AGP 8.11.1 下无法直接编译/打包，
+      # 构建前统一打补丁（见脚本内注释）。
+      - name: Patch Flutter Gradle plugin
+        run: bash tool/patch_flutter_gradle_plugin.sh
+
       - name: Resolve dependencies
         run: flutter pub get
 
@@ -123,8 +128,8 @@ jobs:
           tag = f"v{version}"
           notes = (
               "## 安装包\n\n"
-              f"- `ycoo-client-{version}.apk`（Android，minSdk 21）\n"
-              "- 支持 ABI：arm64-v8a / armeabi-v7a / x86 / x86_64\n"
+              f"- `ycoo-client-{version}.apk`（Android，minSdk 24）\n"
+              "- 支持 ABI：arm64-v8a / armeabi-v7a / x86_64\n"
               "- 使用固定 release 签名，可直接覆盖安装后续版本"
           )
           manifest = {
@@ -157,6 +162,6 @@ jobs:
           body: |
             ## 安装包
 
-            - `ycoo-client-${{ steps.apk.outputs.version }}.apk`（Android，minSdk 21）
-            - 支持 ABI：arm64-v8a / armeabi-v7a / x86 / x86_64
+            - `ycoo-client-${{ steps.apk.outputs.version }}.apk`（Android，minSdk 24）
+            - 支持 ABI：arm64-v8a / armeabi-v7a / x86_64
             - 使用固定 release 签名，可直接覆盖安装后续版本

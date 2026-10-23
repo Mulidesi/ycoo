@@ -176,6 +176,9 @@ ycoo_client/                # 工程根目录（App 代码都在这里）
 以下命令均在 `ycoo_client/` 工程目录内执行，Android / iOS / 桌面端统一使用 **Flutter 3.41.9（Dart 3.11.5）** 及以上（`liquid_glass_widgets` 依赖 `Color.withValues`）。
 
 ```bash
+# Android 构建前先修复 Flutter 自带的 Gradle 插件（CI 已自动执行）
+bash tool/patch_flutter_gradle_plugin.sh
+
 flutter pub get
 
 # Android
@@ -195,6 +198,10 @@ flutter build web --release
 ```
 
 > 项目路径含中文时，Gradle 需要 `android/gradle.properties` 中的 `android.overridePathCheck=true`（已内置）。
+>
+> Android 工具链为 Gradle 8.14 / AGP 8.11.1 / Kotlin 2.2.20 / JDK 17（Flutter 3.41.9 模板默认组合）。
+>
+> Flutter 3.41.9 自带的 Gradle 插件有两处源码缺陷：版本检测在编译期引用已移除的 `com.android.Version`，旧 Groovy 插件与 Kotlin DSL 插件还会生成同名 `FlutterPlugin.class` 导致 `:gradle:jar` 失败。`tool/patch_flutter_gradle_plugin.sh` 会就地打补丁，升级 Flutter 后可移除。
 >
 > 但 Dart AOT 快照器在中文路径下仍会失败（`app.dill` 读取乱码），**Android 发布包请把工程复制到纯英文路径再构建**，例如 `C:\Users\Administrator\build\ycoo_client`。
 >
@@ -221,7 +228,7 @@ flutter build web --release
 
 Windows / macOS / Linux / iOS 的工程目录已生成，但需要对应平台的原生工具链（Visual Studio C++ / Xcode）才能产出安装包。
 
-- 支持 ABI：`arm64-v8a` / `armeabi-v7a` / `x86` / `x86_64`
+- 支持 ABI：`arm64-v8a` / `armeabi-v7a` / `x86_64`
 - 使用固定 release 签名，可直接覆盖安装后续版本，**仅供个人测试**，请勿二次分发
 
 ### 应用内更新

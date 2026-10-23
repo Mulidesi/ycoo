@@ -129,6 +129,14 @@
 - [x] 全仓清理 3.41 弃用项：`withOpacity` → `withValues`、`CardTheme` → `CardThemeData`、`FormField.value` → `initialValue`、Radio → `RadioGroup`
 - [x] 回归：`test/thread_actions_test.dart` 9 例、`test/glass_reply_bar_test.dart` 3 例；analyze 0 issue
 
+## P11 — v1.1.0 发布构建修复（v1.1.1）
+
+- [ ] Android 工具链对齐 Flutter 3.41.9 模板：Gradle 8.14 / AGP 8.11.1 / Kotlin 2.2.20 / JDK 17（原 8.3 / 8.1.0 / 1.8.22 触发 CI 的 AGP 最低版本检查）
+- [ ] `workmanager` 0.5.2 → 0.10.10：旧版使用已被 Flutter 3.41 移除的 v1 embedding API，Android 无法编译
+- [ ] 新增 `tool/patch_flutter_gradle_plugin.sh`：修复 Flutter 3.41.9 Gradle 插件的 `com.android.Version` 编译期引用与 `:gradle:jar` 重复类问题，CI 构建前执行
+- [ ] 本地 `flutter build apk --release` 通过，推 v1.1.1 tag 后 CI 出包
+- 完成 = analyze 0 issue + 全量测试全过 + CI 产出 `ycoo-client-1.1.1.apk`
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
@@ -138,4 +146,5 @@
 - P8 完成 = 我的页积分/统计取值准确 + analyze 0 issue + 29 测试全过 + 真实接口实测一致
 - P9 完成 = 预设默认初始化 + 底栏不遮挡列表 + analyze 0 issue + 48 测试全过
 - P10 完成 = 液态玻璃底栏 + 玻璃回复栏 + 点赞/收藏/分享 + analyze 0 issue + 全量测试全过
+- P11 完成 = Android 工具链升级 + workmanager 升级 + Gradle 插件补丁 + analyze 0 issue + 全量测试全过 + CI 出包
 - APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 起由 GitHub Actions 产出

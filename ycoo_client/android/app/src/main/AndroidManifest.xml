@@ -41,7 +41,7 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- workmanager 0.5.x：使用自定义 Configuration.Provider（MainApplication），
+        <!-- workmanager 0.10.x：使用自定义 Configuration.Provider（MainApplication），
              需移除 WorkManager 默认初始化器 -->
         <provider
             android:name="androidx.startup.InitializationProvider"

@@ -21,6 +21,7 @@
 | 项 | 约定 |
 |----|------|
 | 框架 | Flutter 3.41.9 / Dart 3.11.5 |
+| Android 构建 | Gradle 8.14 / AGP 8.11.1 / Kotlin 2.2.20 / JDK 17；构建前跑 `tool/patch_flutter_gradle_plugin.sh`（修复 3.41.9 Gradle 插件缺陷，升级后可删） |
 | 设计 | Material Design 3，`lib/design/tokens.dart` 单一令牌来源，悬浮液态玻璃底栏 + 详情页玻璃回复栏 |
 | 玻璃 | `liquid_glass_widgets` 1.x（`GlassContainer` / `GlassIconButton` / `GlassModalSheet`）；Shader 不可用时自动退化为磨砂 |
 | 状态 | Provider 2（`AppState` extends `ChangeNotifier`） |
