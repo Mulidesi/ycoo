@@ -175,7 +175,7 @@ class _PostFilterPageState extends State<PostFilterPage> {
           Container(
             padding: const EdgeInsets.all(YuanSpace.sm),
             decoration: BoxDecoration(
-              color: semantic.surfaceContainerHigh.withOpacity(0.5),
+              color: semantic.surfaceContainerHigh.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(YuanRadius.sm),
             ),
             child: Text(

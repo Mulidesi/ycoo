@@ -1,6 +1,6 @@
 # DESIGN.md
 
-源论坛 App（ycoo.net 客户端）视觉与交互硬约束。所有 UI 实现先对本文件，数值一律来自 `lib/design/tokens.dart`（`YuanColors` / `YuanSpace` / `YuanRadius` / `YuanType` / `YuanMotion` / `YuanSizes` / `YuanSemanticColors`）。
+源论坛 App（ycoo.net 客户端）视觉与交互硬约束。所有 UI 实现先对本文件，数值一律来自 `lib/design/tokens.dart`（`YuanColors` / `YuanSpace` / `YuanRadius` / `YuanType` / `YuanMotion` / `YuanSizes` / `YuanSemanticColors`）。本文中 `lib/` 路径均以 `ycoo_client/` 工程目录为基准。
 
 > 本文档合并自 yuan_forum 设计规范（v0.1），与本仓库 v1.0.4 起的实现保持同步。
 
@@ -10,7 +10,7 @@
 2. **信息层级优先于装饰**：帖子正文 > 回帖 > 楼中楼，层级靠字号、表面色、边线、头像尺寸表达。
 3. **站内闭环**：回复、签到、登录在 App 内完成；正文外链点按复制、可浏览器打开，但主流程不依赖浏览器。
 4. **深浅色对等**：每一个表面、边、玻璃层都定义 Light / Dark 语义色，禁止只做浅色再反相。
-5. **液态玻璃克制使用**：仅悬浮底栏使用玻璃；内容卡片保持不透明，保证可读性。
+5. **液态玻璃克制使用**：仅悬浮底栏与帖子详情底部回复栏使用玻璃；内容卡片保持不透明，保证可读性。同屏玻璃层不超过 3 层。
 6. **Token 单一来源**：颜色、间距、圆角、字号一律走 `lib/design/tokens.dart`，禁止散落 Magic Number。
 
 ## 2. 品牌与种子色
@@ -90,16 +90,27 @@ Widget 一律通过 `YuanSemanticColors.of(context)` 取色，禁止自行判断
 
 窄屏三 Tab：**首页、版块、我的**（宽屏 NavigationRail 保留四入口，签到并入「我的」）。
 
-结构：`SafeArea → Padding(16, 12) → ClipRRect(24) → BackdropFilter(sigma 24) → Container(64, glass.fill + 1px glass.stroke + 顶部高光)`。
+结构：`SafeArea → Padding(16, 4/12) → GlassContainer(LiquidRoundedSuperellipse 24, blur 6, thickness 24)`，高 64。
+玻璃面由 `liquid_glass_widgets` 渲染，参数统一走 `YuanGlass`；Shader 不可用时组件库自动退回磨砂。
 
 交互：
 
 - 未选中：线性图标 24px，`text.secondary`，标签 `label`。
-- 选中：图标上移 2px，填充图标，`brand.primary`，背后椭圆指示（primary 混合 8% tertiary）。
-- 切换使用 `motion.springNav`；Android 低版本退化为半透明实色 + 细描边。
+- 选中：填充图标 + `brand.primary` + 标签 `w600`，图标/文字 150ms 过渡。
+- **选中态不画任何背景块 / 胶囊 / 椭圆指示**，只靠高亮色与图标形态区分。
 - `extendBody: true`，列表底部预留底栏空间。
 
-禁止：底栏贴屏幕底边、直角、实心不透明条。
+禁止：底栏贴屏幕底边、直角、实心不透明条、给选中项加方块或胶囊底色。
+
+### 5.1 详情页玻璃回复栏
+
+位置：详情页 body 底部（随键盘上移），左右/底部 12 外边距，悬浮在内容之上。
+
+- 收起态（默认）：高 56 的单行输入胶囊 + 点赞 / 收藏 / 分享三个 `GlassIconButton`；点击胶囊展开并聚焦。
+- 展开态：同一玻璃容器变为 24 圆角，最少 148 高；多行输入（3–6 行）+ 同一组操作 + 右下角「发布」。
+- 键盘收起且无草稿时自动回收起态；有草稿保持展开，避免丢内容。
+- 点赞 / 收藏成功后本地高亮（`brand.primary` 填充图标）；分享用 `GlassModalSheet` 弹层（复制链接 / 浏览器打开）。
+- 玻璃层：容器 1 层，按钮与弹层复用/叠加后同屏 ≤ 3 层。
 
 ## 6. 页面骨架
 
@@ -164,7 +175,8 @@ Widget 一律通过 `YuanSemanticColors.of(context)` 取色，禁止自行判断
 
 ## 10. 验收清单（视觉）
 
-- [x] 三 Tab 悬浮胶囊底栏，液态玻璃可见（模糊 + 高光边）。
+- [x] 三 Tab 悬浮胶囊底栏，液态玻璃可见；选中项仅高亮色，无背景块。
+- [x] 详情页底部玻璃回复栏：收起/展开、点赞/收藏/分享、发布按钮右下角。
 - [x] 正文 16px、回帖 14px，表面色与左边线可区分。
 - [x] 浅色 / 深色切换后无硬编码色残留（`grep Color(0x` 仅剩 tokens.dart）。
 - [x] 星币、签到入口使用 tertiary 琥珀，不与主蓝冲突。

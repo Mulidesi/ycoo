@@ -135,6 +135,15 @@ class ThreadDetail {
   /// 已购买人数（页面显示 `已有 N 人购买`）。
   final int payBuyers;
 
+  /// 点赞（站点「支持/顶一下」）接口地址，含 tid 与 hash；无入口时为 null。
+  final String? supportUrl;
+
+  /// 点赞人数（站点 `#recommendv_add`）；解析不到时为 null。
+  final int? supportCount;
+
+  /// 收藏接口地址，含 formhash；无入口时为 null。
+  final String? favoriteUrl;
+
   const ThreadDetail({
     required this.tid,
     required this.fid,
@@ -150,6 +159,9 @@ class ThreadDetail {
     this.payUrl,
     this.payPriceText,
     this.payBuyers = 0,
+    this.supportUrl,
+    this.supportCount,
+    this.favoriteUrl,
   });
 
   bool get hasMore => page < totalPages;
@@ -372,6 +384,14 @@ class ReplyResult {
   final bool needCaptcha;
 
   const ReplyResult({required this.success, required this.message, this.needCaptcha = false});
+}
+
+/// 站点轻量动作（点赞 / 收藏）结果。
+class SiteActionResult {
+  final bool success;
+  final String message;
+
+  const SiteActionResult({required this.success, required this.message});
 }
 
 /// 发帖表单里的「主题分类」选项（Discuz `typeid`）。

@@ -149,7 +149,7 @@ class _PostContentState extends State<PostContent> {
             fontWeight: r.bold ? FontWeight.w600 : null,
             fontStyle: r.italic ? FontStyle.italic : null,
             decoration: _decoration(r),
-            decorationColor: r.href != null ? linkColor.withOpacity(0.6) : null,
+            decorationColor: r.href != null ? linkColor.withValues(alpha: 0.6) : null,
             color: r.color != null ? Color(r.color!) : (r.href != null ? linkColor : null),
             fontSize: r.fontSize,
           ),

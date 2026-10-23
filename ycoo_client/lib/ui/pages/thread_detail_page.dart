@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,6 +12,7 @@ import '../../design/tokens.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../widgets/common.dart';
+import '../widgets/glass_reply_bar.dart';
 import '../widgets/html_content.dart';
 
 /// 帖子详情。
@@ -53,6 +55,14 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
   String? _error;
   String? _autoReplyHint;
   bool _autoReplyBusy = false;
+
+  /// 回复栏展开态（键盘弹起时展开为多行输入）。
+  bool _replyExpanded = false;
+
+  /// 点赞 / 收藏为会话内状态：站点没有「我的点赞」查询接口，不持久化。
+  bool _liked = false;
+  bool _favorited = false;
+  bool _actionBusy = false;
 
   /// 附件下载状态（key = attachment.url）
   final Map<String, _DlState> _dls = <String, _DlState>{};
@@ -151,6 +161,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     setState(() => _sending = false);
     if (res.success) {
       _replyCtrl.clear();
+      setState(() => _replyExpanded = false);
       FocusScope.of(context).unfocus();
       _toast('回复成功');
       await _load(1);
@@ -208,7 +219,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
           Expanded(child: _buildBody(theme, d)),
           // 输入条必须放在 body 内，随键盘弹出一起上移。
           // 放在 bottomNavigationBar 时，edge-to-edge 设备上会被输入法完全盖住。
-          if (loggedIn && d != null) _replyBar(theme),
+          if (loggedIn && d != null) _replyBar(),
         ],
       ),
     );
@@ -447,7 +458,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: active ? semantic.brandPrimary.withOpacity(0.10) : Colors.transparent,
+          color: active ? semantic.brandPrimary.withValues(alpha: 0.10) : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
@@ -606,9 +617,9 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -917,7 +928,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -972,56 +983,139 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     );
   }
 
-  Widget _replyBar(ThemeData theme) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        decoration: BoxDecoration(
-          color: YuanSemanticColors.of(context).surfaceThreadBody,
-          border: Border(top: BorderSide(color: YuanSemanticColors.of(context).outlineSubtle)),
+  /// 底部悬浮玻璃回复栏（收起 / 展开由本页状态驱动）。
+  Widget _replyBar() {
+    return GlassReplyBar(
+      controller: _replyCtrl,
+      expanded: _replyExpanded,
+      onExpandedChanged: (v) => setState(() => _replyExpanded = v),
+      onSend: _sendReply,
+      onLike: _toggleSupport,
+      onFavorite: _toggleFavorite,
+      onShare: _showShareSheet,
+      liked: _liked,
+      favorited: _favorited,
+      sending: _sending,
+      busy: _actionBusy,
+    );
+  }
+
+  /// 点赞（站点叫「支持」）：一次性操作，成功后本地保持高亮。
+  Future<void> _toggleSupport() async {
+    final url = _detail?.supportUrl;
+    if (url == null) return;
+    if (_liked) {
+      _toast('已支持过本帖');
+      return;
+    }
+    if (_actionBusy) return;
+    setState(() => _actionBusy = true);
+    final res = await context.read<AppState>().api.supportThread(url);
+    if (!mounted) return;
+    setState(() {
+      _actionBusy = false;
+      if (res.success) _liked = true;
+    });
+    _toast(res.message);
+  }
+
+  /// 收藏：成功后本地标记；站点未提供「取消收藏」入口，故不做反向操作。
+  Future<void> _toggleFavorite() async {
+    final url = _detail?.favoriteUrl;
+    if (url == null) return;
+    if (_favorited) {
+      _toast('已收藏本帖');
+      return;
+    }
+    if (_actionBusy) return;
+    setState(() => _actionBusy = true);
+    final res = await context.read<AppState>().api.favoriteThread(url);
+    if (!mounted) return;
+    setState(() {
+      _actionBusy = false;
+      if (res.success) _favorited = true;
+    });
+    _toast(res.message);
+  }
+
+  /// 分享：玻璃弹层提供「复制链接 / 在浏览器打开」。
+  Future<void> _showShareSheet() async {
+    final url = _threadUrl();
+    await GlassModalSheet.show<void>(
+      context: context,
+      halfSize: 0.32,
+      builder: (sheetCtx) => Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            YuanSpace.xl,
+            YuanSpace.xs,
+            YuanSpace.xl,
+            YuanSpace.lg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('分享本帖', style: YuanType.titleSm),
+              const SizedBox(height: YuanSpace.md),
+              _ShareAction(
+                icon: Icons.link_rounded,
+                label: '复制链接',
+                onTap: () async {
+                  Navigator.of(sheetCtx).pop();
+                  await _copyText(url, okHint: '链接已复制');
+                },
+              ),
+              const SizedBox(height: YuanSpace.xs),
+              _ShareAction(
+                icon: Icons.open_in_browser_rounded,
+                label: '在浏览器打开',
+                onTap: () async {
+                  Navigator.of(sheetCtx).pop();
+                  await launchUrl(
+                    Uri.parse(url),
+                    mode: LaunchMode.externalApplication,
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+}
+
+/// 分享弹层中的单条操作。
+class _ShareAction extends StatelessWidget {
+  const _ShareAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantic = YuanSemanticColors.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(YuanRadius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: YuanSpace.sm,
+          vertical: YuanSpace.sm,
         ),
         child: Row(
           children: [
-            Expanded(
-              child: TextField(
-                controller: _replyCtrl,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendReply(),
-                decoration: InputDecoration(
-                  hintText: '写评论…',
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                  fillColor: YuanSemanticColors.of(context).surfaceContainer,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: BorderSide(color: YuanSemanticColors.of(context).brandPrimary.withOpacity(0.4)),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: '分享',
-              onPressed: () => _copyText(_threadUrl(), okHint: '链接已复制'),
-              icon: const Icon(Icons.share_outlined, size: 19),
-            ),
-            IconButton.filled(
-              onPressed: _sending ? null : _sendReply,
-              icon: _sending
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.send_rounded, size: 18),
-            ),
+            Icon(icon, size: 20, color: semantic.textSecondary),
+            const SizedBox(width: YuanSpace.sm),
+            Text(label, style: YuanType.bodyMd),
           ],
         ),
       ),

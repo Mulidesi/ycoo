@@ -1,13 +1,12 @@
 /// 悬浮液态玻璃底栏。
 ///
-/// 三入口胶囊底栏：`SafeArea` → 外边距 → `ClipRRect(24)` → `BackdropFilter(24)`
-/// → 半透明表面 + 高光描边。选中项图标上移 2px、填充图标、背后椭圆指示。
-/// 交互与视觉约束见 DESIGN.md 第 5 节。
+/// 三入口胶囊底栏：`SafeArea` → 外边距 → `GlassContainer`（liquid_glass_widgets）。
+/// 选中项**不再有小方块/胶囊背景**，仅以高亮色（brandPrimary）区分；
+/// 未选中用次级文字色。交互与视觉约束见 DESIGN.md 第 5 节。
 library;
 
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../tokens.dart';
 
@@ -61,51 +60,31 @@ class LiquidGlassBar extends StatelessWidget {
           YuanSpace.barHorizontal,
           YuanSpace.barBottom,
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(YuanRadius.lg),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(
-              sigmaX: YuanSizes.barBlurSigma,
-              sigmaY: YuanSizes.barBlurSigma,
-            ),
-            child: Container(
-              height: YuanSizes.barHeight,
-              decoration: BoxDecoration(
-                color: semantic.glassFill,
-                borderRadius: BorderRadius.circular(YuanRadius.lg),
-                border: Border.all(color: semantic.glassStroke),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
+        child: GlassContainer(
+          height: YuanSizes.barHeight,
+          shape: const LiquidRoundedSuperellipse(
+            borderRadius: YuanRadius.lg,
+          ),
+          settings: LiquidGlassSettings(
+            glassColor: semantic.glassFill,
+            blur: YuanGlass.blur,
+            thickness: YuanGlass.thickness,
+          ),
+          // 底栏固定在视口底部：独立合成层，避免随列表滚动重绘。
+          useOwnLayer: true,
+          child: Row(
+            children: [
+              for (var i = 0; i < destinations.length; i++)
+                Expanded(
+                  child: _BarItem(
+                    destination: destinations[i],
+                    selected: i == currentIndex,
+                    badge: badgeCounts[i] ?? 0,
+                    disableAnim: disableAnim,
+                    onTap: () => onSelected(i),
                   ),
-                ],
-              ),
-              child: Stack(
-                children: [
-                  // 顶部高光细线
-                  Positioned(
-                    top: 0,
-                    left: 18,
-                    right: 18,
-                    child: Container(height: 1, color: semantic.glassHighlight),
-                  ),
-                  Row(
-                    children: [
-                      for (var i = 0; i < destinations.length; i++)
-                        Expanded(child: _BarItem(
-                          destination: destinations[i],
-                          selected: i == currentIndex,
-                          badge: badgeCounts[i] ?? 0,
-                          disableAnim: disableAnim,
-                          onTap: () => onSelected(i),
-                        )),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+                ),
+            ],
           ),
         ),
       ),
@@ -153,31 +132,24 @@ class _BarItem extends StatelessWidget {
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    // 选中态背后的椭圆指示（色温偏暖：primary 混合 tertiary）
-                    if (selected)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 6,
-                        child: Center(
-                          child: Container(
-                            width: 44,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: Color.alphaBlend(
-                                semantic.brandTertiary.withOpacity(0.14),
-                                semantic.brandPrimary.withOpacity(0.10),
-                              ),
-                              borderRadius:
-                                  BorderRadius.circular(YuanRadius.pill),
-                            ),
-                          ),
-                        ),
+                    // 选中态只用高亮色区分，不再绘制背景块 / 胶囊。
+                    AnimatedSwitcher(
+                      duration:
+                          disableAnim ? Duration.zero : YuanMotion.fast,
+                      switchInCurve: YuanMotion.emphasized,
+                      switchOutCurve: YuanMotion.emphasized,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: ScaleTransition(scale: animation, child: child),
                       ),
-                    Icon(
-                      selected ? destination.selectedIcon : destination.icon,
-                      size: 24,
-                      color: color,
+                      child: Icon(
+                        selected
+                            ? destination.selectedIcon
+                            : destination.icon,
+                        key: ValueKey<bool>(selected),
+                        size: 24,
+                        color: color,
+                      ),
                     ),
                     if (badge > 0)
                       Positioned(
@@ -188,13 +160,17 @@ class _BarItem extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  destination.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                AnimatedDefaultTextStyle(
+                  duration: disableAnim ? Duration.zero : YuanMotion.fast,
+                  curve: YuanMotion.emphasized,
                   style: YuanType.label.copyWith(
                     color: color,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                  child: Text(
+                    destination.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

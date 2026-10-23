@@ -116,7 +116,7 @@ class _SearchPageState extends State<SearchPage> {
               '提示：部分版块或敏感词需要登录后才会返回结果',
               style: theme.textTheme.bodySmall?.copyWith(
                 fontSize: 11.5,
-                color: theme.colorScheme.outline.withOpacity(0.8),
+                color: theme.colorScheme.outline.withValues(alpha: 0.8),
               ),
             ),
           ],

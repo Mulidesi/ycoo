@@ -250,7 +250,7 @@ class _UserSpacePageState extends State<UserSpacePage> {
                 Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.25),
+                    color: Colors.white.withValues(alpha: 0.25),
                     shape: BoxShape.circle,
                   ),
                   child: Avatar(
@@ -287,7 +287,7 @@ class _UserSpacePageState extends State<UserSpacePage> {
             Container(
               padding: const EdgeInsets.symmetric(vertical: YuanSpace.sm),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.12),
+                color: Colors.white.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(YuanRadius.sm + 2),
               ),
               child: Column(
@@ -336,7 +336,7 @@ class _UserSpacePageState extends State<UserSpacePage> {
   Widget _pill(String text) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.18),
+          color: Colors.white.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(YuanRadius.pill),
         ),
         child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10.5)),

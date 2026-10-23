@@ -100,6 +100,9 @@ class ForumApi {
       payUrl: d.payUrl,
       payPriceText: d.payPriceText,
       payBuyers: d.payBuyers,
+      supportUrl: d.supportUrl,
+      supportCount: d.supportCount,
+      favoriteUrl: d.favoriteUrl,
     );
   }
 
@@ -280,6 +283,67 @@ class ForumApi {
       message: msg.isEmpty ? '回复失败，站点未返回提示，请稍后重试' : msg,
     );
   }
+
+  // ---------------------------------------------------------------- 点赞 / 收藏
+
+  /// 点赞（Discuz「支持/顶一下」）。
+  ///
+  /// [url] 来自帖子页 `a[href*="action=recommend&do=add"]`，已带 tid 与 hash。
+  /// 成功响应没有 succeedhandle，只有 `errorhandle_recommend('评价指数 5 +1', …)`
+  /// 与 `recommentc` 计数节点；失败则是 `alert_error` + 文案。
+  Future<SiteActionResult> supportThread(String url) async {
+    final r = await client.get(_withInajax(url), referer: '$kBaseUrl/forum.php');
+    final body = r.body;
+    if (looksLoggedOut(body)) {
+      return const SiteActionResult(success: false, message: '点赞前请先登录');
+    }
+    final msg = parseAjaxMessage(body);
+    if (msg.contains('已评价') || msg.contains('已经支持') || msg.contains('已支持')) {
+      return const SiteActionResult(success: true, message: '已支持过本帖');
+    }
+    // 成功走专用回调：errorhandle_recommend('评价指数 5 +1', {...})。
+    // 失败（hash 过期 / 来路不正确）走 alert_error，因此用回调名判定。
+    if (body.contains('errorhandle_recommend') ||
+        (body.contains('recommentc') && !body.contains('alert_error'))) {
+      return const SiteActionResult(success: true, message: '已支持');
+    }
+    if (msg.contains('登录') || msg.contains('游客')) {
+      return const SiteActionResult(success: false, message: '登录状态已失效，请重新登录');
+    }
+    return SiteActionResult(
+      success: false,
+      message: msg.isEmpty ? '点赞失败，站点未返回提示' : _shorten(msg),
+    );
+  }
+
+  /// 收藏帖子。
+  ///
+  /// [url] 来自帖子页 `a[href*="ac=favorite&type=thread"]`，已带 formhash。
+  /// 成功响应：`succeedhandle_('…', '信息收藏成功 ', {'id':…, 'favid':…})`。
+  Future<SiteActionResult> favoriteThread(String url) async {
+    final r = await client.get(_withInajax(url), referer: '$kBaseUrl/forum.php');
+    final body = r.body;
+    if (looksLoggedOut(body)) {
+      return const SiteActionResult(success: false, message: '收藏前请先登录');
+    }
+    final msg = parseAjaxMessage(body);
+    if (msg.contains('收藏成功')) {
+      return const SiteActionResult(success: true, message: '收藏成功');
+    }
+    if (msg.contains('已经收藏') || msg.contains('已收藏')) {
+      return const SiteActionResult(success: true, message: '已收藏过本帖');
+    }
+    if (msg.contains('登录') || msg.contains('游客')) {
+      return const SiteActionResult(success: false, message: '登录状态已失效，请重新登录');
+    }
+    return SiteActionResult(
+      success: false,
+      message: msg.isEmpty ? '收藏失败，站点未返回提示' : _shorten(msg),
+    );
+  }
+
+  /// 站点弹窗接口统一带 inajax=1（等价于 showWindow 的 AJAX 请求）。
+  String _withInajax(String url) => url.contains('inajax=') ? url : '$url&inajax=1';
 
   // ---------------------------------------------------------------- 发帖
 

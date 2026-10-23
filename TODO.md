@@ -1,5 +1,7 @@
 # Yuan Forum 任务清单（ycoo_client）
 
+> 本文中 `lib/`、`test/`、`tool/` 等路径均以 `ycoo_client/` 工程目录为基准；项目文档（AGENTS / DESIGN / README）在仓库根目录。
+
 ## P0 — 基础（已完成，v1.0.0）
 
 - [x] 站点结构分析（Discuz! X3.5 + comiis 模板，HTML 解析）
@@ -115,6 +117,18 @@
       `test/preview_home.dart` 输出 `goldens/home_bottom.png`
 - [x] 验证：`flutter analyze` 0 issue；`flutter test` 48 全过（1 项因缺 recon 样本跳过）
 
+## P10 — 液态玻璃底栏与回复栏（v1.1.0）
+
+- [x] 底栏选中态去掉椭圆背景块：仅 `brand.primary` + 填充图标 + `w600` 标签，图标/文字 150ms 过渡
+- [x] 底栏容器迁移到 `liquid_glass_widgets` 1.x `GlassContainer`，磨砂/厚度参数统一走 `YuanGlass`
+- [x] 详情页底部改为悬浮玻璃回复栏 `GlassReplyBar`：收起（输入胶囊 + 点赞/收藏/分享）↔ 展开（多行输入 + 右下角发布）
+- [x] 点赞（站点「支持」）：`supportThread` + 成功/重复/失效文案区分，成功本地高亮
+- [x] 收藏：`favoriteThread`，成功后本地高亮（站点无取消收藏入口，不做反向操作）
+- [x] 分享：`GlassModalSheet` 弹层（复制链接 / 在浏览器打开）
+- [x] 工具链升级 Flutter 3.41.9 / Dart 3.11.5（`liquid_glass_widgets` 依赖 `Color.withValues`），CI `flutter-version` 同步
+- [x] 全仓清理 3.41 弃用项：`withOpacity` → `withValues`、`CardTheme` → `CardThemeData`、`FormField.value` → `initialValue`、Radio → `RadioGroup`
+- [x] 回归：`test/thread_actions_test.dart` 9 例、`test/glass_reply_bar_test.dart` 3 例；analyze 0 issue
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
@@ -123,4 +137,5 @@
 - P7 完成 = 正文排版对齐移动端 + analyze 0 issue + 17 测试全过 + 41 样本 0 残留
 - P8 完成 = 我的页积分/统计取值准确 + analyze 0 issue + 29 测试全过 + 真实接口实测一致
 - P9 完成 = 预设默认初始化 + 底栏不遮挡列表 + analyze 0 issue + 48 测试全过
+- P10 完成 = 液态玻璃底栏 + 玻璃回复栏 + 点赞/收藏/分享 + analyze 0 issue + 全量测试全过
 - APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 起由 GitHub Actions 产出

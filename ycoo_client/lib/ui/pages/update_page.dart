@@ -351,7 +351,7 @@ class _UpdatePageState extends State<UpdatePage> {
               padding: const EdgeInsets.all(YuanSpace.sm),
               decoration: BoxDecoration(
                 color:
-                    theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+                    theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
                 borderRadius: BorderRadius.circular(YuanRadius.sm),
               ),
               child: SelectableText(

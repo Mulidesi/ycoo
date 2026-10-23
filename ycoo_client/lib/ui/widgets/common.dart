@@ -87,7 +87,7 @@ class TagChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
       decoration: BoxDecoration(
-        color: c.withOpacity(0.1),
+        color: c.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
@@ -163,7 +163,7 @@ class LoadingList extends StatelessWidget {
       itemBuilder: (c, i) => Container(
         height: 64,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.35),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(14),
         ),
       ),

@@ -203,7 +203,7 @@ class _BoardsPageState extends State<BoardsPage> with AutomaticKeepAliveClientMi
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(0.08),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(11),
                 ),
                 clipBehavior: Clip.antiAlias,
@@ -253,7 +253,7 @@ class _BoardsPageState extends State<BoardsPage> with AutomaticKeepAliveClientMi
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF97316).withOpacity(0.1),
+                    color: const Color(0xFFF97316).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(

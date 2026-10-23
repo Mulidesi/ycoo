@@ -224,7 +224,7 @@ class _NewThreadPageState extends State<NewThreadPage> {
             )
           else if (boards.isNotEmpty)
             DropdownButtonFormField<int>(
-              value: _fid,
+              initialValue: _fid,
               isExpanded: true,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(
@@ -396,9 +396,9 @@ class _NoticeCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: YuanSpace.xs),
       padding: const EdgeInsets.all(YuanSpace.sm),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(YuanRadius.sm),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

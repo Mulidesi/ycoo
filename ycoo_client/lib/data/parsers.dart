@@ -421,6 +421,24 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
     ));
   }
 
+  // 点赞（站点「支持」）与收藏入口：
+  //   点赞 add：forum.php?mod=misc&action=recommend&do=add&tid=…&hash=…&handlekey=recommend
+  //   收藏：home.php?mod=spacecp&ac=favorite&type=thread&id=…&formhash=…
+  // 游客也会渲染这两个链接（点击后弹登录窗），登录态由接口层按响应判断。
+  final supportHref =
+      doc.querySelector('a[href*="action=recommend"][href*="do=add"]')?.attributes['href'];
+  final supportUrl =
+      supportHref == null || supportHref.isEmpty ? null : absoluteUrl(supportHref);
+  final supportCountText = _text(doc.querySelector('#recommendv_add'));
+  final supportCount =
+      supportCountText.isEmpty ? null : int.tryParse(supportCountText);
+
+  final favoriteHref = doc
+      .querySelector('a[href*="ac=favorite"][href*="type=thread"]')
+      ?.attributes['href'];
+  final favoriteUrl =
+      favoriteHref == null || favoriteHref.isEmpty ? null : absoluteUrl(favoriteHref);
+
   return ThreadDetail(
     tid: tid,
     fid: fid,
@@ -436,6 +454,9 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
     payUrl: payUrl,
     payPriceText: payPriceText,
     payBuyers: payBuyers,
+    supportUrl: supportUrl,
+    supportCount: supportCount,
+    favoriteUrl: favoriteUrl,
   );
 }
 

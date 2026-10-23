@@ -37,10 +37,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Flutter 3.24.5
+      - name: Set up Flutter 3.41.9
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'
+          flutter-version: '3.41.9'
           channel: stable
           cache: true
 
@@ -57,7 +57,7 @@ jobs:
 
       # 只跑离线测试：live_image_test 依赖线上图片，CI 里不稳定
       - name: Offline tests
-        run: flutter test test/paid_thread_test.dart test/link_resolver_test.dart test/new_thread_test.dart test/post_filter_test.dart test/hidden_thread_test.dart test/update_manifest_test.dart test/update_service_test.dart test/update_page_test.dart
+        run: flutter test test/paid_thread_test.dart test/link_resolver_test.dart test/new_thread_test.dart test/post_filter_test.dart test/hidden_thread_test.dart test/update_manifest_test.dart test/update_service_test.dart test/update_page_test.dart test/thread_actions_test.dart test/glass_reply_bar_test.dart test/reply_composer_test.dart
 
       # 正式签名：密钥与口令存放在仓库 Secrets，绝不入库。
       # 缺少 Secret 时退回 debug 签名，仅用于本地/预发布验证。

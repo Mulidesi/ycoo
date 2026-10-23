@@ -72,7 +72,22 @@ class _SiteSettingsPageState extends State<SiteSettingsPage> {
           Text('主域名', style: theme.textTheme.bodySmall?.copyWith(
             fontSize: 12, fontWeight: FontWeight.w600, color: theme.colorScheme.outline)),
           const SizedBox(height: 8),
-          for (final site in ForumSite.all) _siteTile(theme, st, site),
+          RadioGroup<String>(
+            groupValue: st.settings.siteId,
+            onChanged: (id) {
+              for (final site in ForumSite.all) {
+                if (site.id == id) {
+                  _switchTo(site);
+                  break;
+                }
+              }
+            },
+            child: Column(
+              children: [
+                for (final site in ForumSite.all) _siteTile(theme, st, site),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
           Text('通用', style: theme.textTheme.bodySmall?.copyWith(
             fontSize: 12, fontWeight: FontWeight.w600, color: theme.colorScheme.outline)),
@@ -90,7 +105,7 @@ class _SiteSettingsPageState extends State<SiteSettingsPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(YuanRadius.sm),
             ),
             child: Text(
@@ -114,8 +129,6 @@ class _SiteSettingsPageState extends State<SiteSettingsPage> {
       margin: const EdgeInsets.only(bottom: 10),
       child: RadioListTile<String>(
         value: site.id,
-        groupValue: st.settings.siteId,
-        onChanged: (_) => _switchTo(site),
         title: Text(
           '${site.name}${isCurrent ? '（当前）' : ''}',
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),

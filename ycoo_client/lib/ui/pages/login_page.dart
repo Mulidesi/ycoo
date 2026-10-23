@@ -88,12 +88,12 @@ class _LoginPageState extends State<LoginPage> {
           Positioned(
             top: -80,
             right: -60,
-            child: _blurCircle(260, Colors.lightBlueAccent.withOpacity(0.35)),
+            child: _blurCircle(260, Colors.lightBlueAccent.withValues(alpha: 0.35)),
           ),
           Positioned(
             bottom: -100,
             left: -70,
-            child: _blurCircle(300, Colors.indigoAccent.withOpacity(0.35)),
+            child: _blurCircle(300, Colors.indigoAccent.withValues(alpha: 0.35)),
           ),
           SafeArea(
             child: Center(
@@ -114,7 +114,7 @@ class _LoginPageState extends State<LoginPage> {
                           borderRadius: BorderRadius.circular(22),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.18),
+                              color: Colors.black.withValues(alpha: 0.18),
                               blurRadius: 40,
                               offset: const Offset(0, 18),
                             ),
@@ -178,7 +178,7 @@ class _LoginPageState extends State<LoginPage> {
                               if (_showQuestion) ...[
                                 const SizedBox(height: 4),
                                 DropdownButtonFormField<int>(
-                                  value: _questionId,
+                                  initialValue: _questionId,
                                   decoration: const InputDecoration(
                                     contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                                   ),
@@ -340,7 +340,7 @@ class _LoginPageState extends State<LoginPage> {
             gradient: const LinearGradient(colors: [Color(0xFF60A5FA), Color(0xFF2563EB)]),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              BoxShadow(color: Colors.blueAccent.withOpacity(0.45), blurRadius: 24, offset: const Offset(0, 10)),
+              BoxShadow(color: Colors.blueAccent.withValues(alpha: 0.45), blurRadius: 24, offset: const Offset(0, 10)),
             ],
           ),
           alignment: Alignment.center,

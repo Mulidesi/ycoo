@@ -195,7 +195,7 @@ class ThreadTile extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.55),
+                    color: Colors.black.withValues(alpha: 0.55),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Row(

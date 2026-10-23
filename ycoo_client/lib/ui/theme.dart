@@ -50,7 +50,7 @@ class AppTheme {
           color: isLight ? YuanColors.textPrimaryLight : YuanColors.textPrimaryDark,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 0,
         margin: EdgeInsets.zero,
         color: isLight

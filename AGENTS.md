@@ -2,12 +2,13 @@
 
 源论坛 App（ycoo_client）。Flutter 客户端，对接 Discuz! X3.5 站点 `https://ycoo.net/`，覆盖 Android / iOS / Windows / macOS / Linux / Web。
 
+仓库结构：**文档统一放仓库根目录**（`AGENTS.md` / `DESIGN.md` / `TODO.md` / `README.md`），App 工程在 `ycoo_client/`；本文中相对路径（`lib/`、`tool/`、`test/`）均以 `ycoo_client/` 为基准。
+
 进入本仓库后，按下列顺序阅读：
 
 1. `TODO.md` — 当前优先级与完成边界
 2. `DESIGN.md` — 视觉与交互硬约束
 3. `README.md` — 站点结构分析、接口封装、构建与实测
-4. `docs/architecture.md` — 分层与数据流
 
 改 UI 前先对 `DESIGN.md`；改解析前先跑 `tool/parse_test.dart` 回归；改需求前先更新文档再写代码。
 
@@ -19,8 +20,9 @@
 
 | 项 | 约定 |
 |----|------|
-| 框架 | Flutter 3.24.5 / Dart 3.5.4 |
-| 设计 | Material Design 3，`lib/design/tokens.dart` 单一令牌来源，悬浮液态玻璃底栏 |
+| 框架 | Flutter 3.41.9 / Dart 3.11.5 |
+| 设计 | Material Design 3，`lib/design/tokens.dart` 单一令牌来源，悬浮液态玻璃底栏 + 详情页玻璃回复栏 |
+| 玻璃 | `liquid_glass_widgets` 1.x（`GlassContainer` / `GlassIconButton` / `GlassModalSheet`）；Shader 不可用时自动退化为磨砂 |
 | 状态 | Provider 2（`AppState` extends `ChangeNotifier`） |
 | 网络 | `package:http` + 自维护 Cookie（`core/discuz_client.dart`） |
 | 解析 | `html` 包，纯 Dart 解析器（不 import Flutter，可离线回归） |
@@ -52,10 +54,10 @@ lib/
     preview_store.dart      列表预览缓存 + 节流请求
   design/
     tokens.dart             颜色/间距/圆角/字号/运动/尺寸 + 语义色 ThemeExtension
-    glass/liquid_glass_bar.dart  悬浮液态玻璃底栏
+    glass/liquid_glass_bar.dart  悬浮液态玻璃底栏（GlassContainer）
   ui/
     theme.dart              Material 3 主题（亮/暗，注入语义色）
-    widgets/                正文渲染器、帖子行、通用组件
+    widgets/                正文渲染器、帖子行、玻璃回复栏、通用组件
     pages/                  登录 / 首页 / 版块 / 列表 / 详情 / 签到 / 我的 / 搜索
 ```
 
@@ -71,6 +73,7 @@ lib/
 ## 常用命令
 
 ```bash
+# 均在 ycoo_client/ 目录内执行
 flutter pub get
 flutter analyze        # 必须 0 issue
 flutter test           # 离线 + 联网图片测试
@@ -85,4 +88,3 @@ flutter build apk --release   # Android 打包（见 README 构建章节）
 | `DESIGN.md` | 视觉规则 |
 | `TODO.md` | 任务与进度 |
 | `README.md` | 站点分析、接口、构建、实测记录 |
-| `docs/architecture.md` | 分层与数据流 |

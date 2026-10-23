@@ -192,7 +192,7 @@ class _ImageDiagPageState extends State<ImageDiagPage> {
                         fit: BoxFit.contain,
                         errorBuilder: (c) => Container(
                           alignment: Alignment.center,
-                          color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                           child: Text('这张图渲染失败', style: theme.textTheme.bodySmall),
                         ),
                       ),

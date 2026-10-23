@@ -147,11 +147,30 @@ abstract final class YuanMotion {
   static const springNav = Curves.easeOutBack;
 }
 
+/// 液态玻璃（liquid_glass_widgets）统一参数。
+///
+/// 底栏与回帖栏共用一组参数，避免两个玻璃面出现厚度/磨砂不一致。
+/// `blur` / `thickness` 直接对应 `LiquidGlassSettings.blur/thickness`；
+/// 渲染器不支持 Shader 时组件库自动降级，参数仍生效于磨砂回退。
+abstract final class YuanGlass {
+  /// 磨砂强度（逻辑像素，typical 2–8）。
+  static const blur = 6.0;
+
+  /// 玻璃厚度 / 折射深度（逻辑像素，typical 10–40）。
+  static const thickness = 24.0;
+
+  /// 回帖栏离屏幕左右 / 底部的呼吸边距。
+  static const replyBarMargin = YuanSpace.sm;
+
+  /// 回帖栏收起态高度 / 展开态最小高度。
+  static const replyBarCollapsedHeight = 56.0;
+  static const replyBarExpandedMinHeight = 148.0;
+}
+
 /// 尺寸与派生常量。
 abstract final class YuanSizes {
-  /// 悬浮底栏高度 / 模糊半径。
+  /// 悬浮底栏高度。
   static const barHeight = 64.0;
-  static const barBlurSigma = 24.0;
 
   /// 悬浮底栏总占位高度（不含系统安全区）：
   /// 上外边距 + 胶囊高度 + 下外边距。

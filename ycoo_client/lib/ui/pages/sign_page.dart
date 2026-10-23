@@ -162,7 +162,7 @@ class _SignPageState extends State<SignPage> with AutomaticKeepAliveClientMixin 
         borderRadius: BorderRadius.circular(YuanRadius.lg),
         boxShadow: [
           BoxShadow(
-            color: (signed ? YuanColors.brandSecondaryLight : YuanColors.brandPrimaryLight).withOpacity(0.28),
+            color: (signed ? YuanColors.brandSecondaryLight : YuanColors.brandPrimaryLight).withValues(alpha: 0.28),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),

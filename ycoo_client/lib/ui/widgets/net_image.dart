@@ -100,7 +100,7 @@ class _NetImageState extends State<NetImage> {
       width: widget.width,
       height: widget.height ?? 120,
       alignment: Alignment.center,
-      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
       child: child,
     );
   }
@@ -112,7 +112,7 @@ class _NetImageState extends State<NetImage> {
       height: widget.height ?? 100,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
         borderRadius: widget.borderRadius,
       ),
       child: Column(

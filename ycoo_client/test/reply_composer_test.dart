@@ -61,6 +61,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
     }
 
+    // 收起态是假输入框，点击后展开为真正的 TextField。
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.text('写评论…'));
+    await tester.pump(const Duration(milliseconds: 400));
+
     final composer = find.byType(TextField);
     expect(composer, findsOneWidget);
     expect(tester.getRect(composer).bottom, lessThanOrEqualTo(700));

@@ -232,18 +232,24 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                   title: const Text('Material You 动态取色', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                   subtitle: const Text('跟随系统壁纸配色（Android 12+ 生效）', style: TextStyle(fontSize: 11.5)),
                 ),
-                for (final (mode, label, icon) in const [
-                  ('system', '跟随系统', Icons.brightness_auto_rounded),
-                  ('light', '浅色模式', Icons.light_mode_rounded),
-                  ('dark', '深色模式', Icons.dark_mode_rounded),
-                ])
-                  RadioListTile<String>(
-                    value: mode,
-                    groupValue: st.settings.themeMode,
-                    onChanged: (v) => st.setThemeMode(v ?? 'system'),
-                    secondary: _TileIcon(icon, YuanColors.brandPrimaryLight),
-                    title: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                RadioGroup<String>(
+                  groupValue: st.settings.themeMode,
+                  onChanged: (v) => st.setThemeMode(v ?? 'system'),
+                  child: Column(
+                    children: [
+                      for (final (mode, label, icon) in const [
+                        ('system', '跟随系统', Icons.brightness_auto_rounded),
+                        ('light', '浅色模式', Icons.light_mode_rounded),
+                        ('dark', '深色模式', Icons.dark_mode_rounded),
+                      ])
+                        RadioListTile<String>(
+                          value: mode,
+                          secondary: _TileIcon(icon, YuanColors.brandPrimaryLight),
+                          title: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                        ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),
@@ -326,7 +332,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
               Container(
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.25),
+                  color: Colors.white.withValues(alpha: 0.25),
                   shape: BoxShape.circle,
                 ),
                 child: Avatar(url: u?.avatar, name: u?.username, size: 54),
@@ -364,7 +370,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
+              color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
@@ -415,7 +421,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
   Widget _pill(String text) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.18),
+          color: Colors.white.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10.5)),
@@ -719,7 +725,7 @@ class _TileIcon extends StatelessWidget {
     return Container(
       width: 34,
       height: 34,
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
       child: Icon(icon, size: 18, color: color),
     );
   }
