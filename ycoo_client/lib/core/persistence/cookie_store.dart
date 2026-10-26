@@ -39,11 +39,15 @@ class CookieStore {
     if (setCookieHeader == null || setCookieHeader.isEmpty) return;
     final key = normalizeHost(host);
     final bucket = _buckets.putIfAbsent(key, () => <String, String>{});
-    for (final pair in setCookieHeader.split(';')) {
-      final eq = pair.indexOf('=');
+    // Set-Cookie headers are joined with ", " — split into individual cookies.
+    // Each cookie: name=value; path=/; expires=... — only extract name=value
+    // before any ";" so attributes don't pollute the store.
+    for (final cookieStr in setCookieHeader.split(', ')) {
+      final firstSegment = cookieStr.split(';').first.trim();
+      final eq = firstSegment.indexOf('=');
       if (eq <= 0) continue;
-      final name = pair.substring(0, eq).trim();
-      final value = pair.substring(eq + 1).trim();
+      final name = firstSegment.substring(0, eq).trim();
+      final value = firstSegment.substring(eq + 1).trim();
       if (name.isEmpty) continue;
       bucket[name] = value;
     }

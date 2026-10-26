@@ -91,10 +91,11 @@ class DiscuzClient {
     return h;
   }
 
-  void _absorb(http.Response r) {
+  void _absorb(http.BaseResponse r) {
     final host = (r.request?.url ?? Uri.parse(baseUrl)).host;
     if (!_sameSite(host)) return;
-    store.absorb(_siteHost, r.headers['set-cookie']);
+    final sc = r.headers['set-cookie'];
+    if (sc != null && sc.isNotEmpty) store.absorb(_siteHost, sc);
   }
 
   String _decode(http.Response r) {
@@ -141,6 +142,8 @@ class DiscuzClient {
       final streamed =
           await _client.send(req).timeout(const Duration(seconds: 25));
       if (streamed.statusCode >= 300 && streamed.statusCode < 400) {
+        // Absorb cookies from redirect response (e.g. login 302 with session cookies)
+        _absorb(streamed);
         final location = streamed.headers['location'];
         await streamed.stream.drain<void>();
         if (location == null || location.isEmpty) {
@@ -154,6 +157,12 @@ class DiscuzClient {
         final next = currentUri.resolve(location);
         if (!_sameSite(next.host)) {
           currentHeaders.remove('Cookie');
+        } else {
+          // Update Cookie header with newly absorbed cookies from redirect
+          final cookie = store.headerFor(_siteHost);
+          if (cookie != null && cookie.isNotEmpty) {
+            currentHeaders['Cookie'] = cookie;
+          }
         }
         currentUri = next;
         currentMethod = 'GET';

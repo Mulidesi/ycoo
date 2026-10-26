@@ -512,8 +512,10 @@ SignStatus parseSignPage(String html) {
 
 /// 从任意页面提取 formhash
 String? parseFormhash(String html) {
-  final m = RegExp(r'name="formhash"\s+value="([^"]+)"').firstMatch(html) ??
-      RegExp(r'formhash=([0-9a-zA-Z]{8})').firstMatch(html);
+  final doc = html_parser.parse(html);
+  final input = doc.querySelector('input[name="formhash"]');
+  if (input != null) return input.attributes['value'];
+  final m = RegExp(r'formhash=([0-9a-zA-Z]{8})').firstMatch(html);
   return m?.group(1);
 }
 
@@ -900,24 +902,18 @@ String parseAjaxMessage(String body) {
 /// 站点模板会把 `extra` / `handlekey` / `posttime` 写死在表单里，
 /// 直接按表单 action 提交最稳。
 ({String action, String? formhash, String? posttime})? parseReplyForm(String html) {
-  final m = RegExp(
-    r'''<form[^>]*id="fastpostform"[^>]*action="([^"]+)"''',
-    caseSensitive: false,
-  ).firstMatch(html);
-  if (m == null) return null;
-  final action = m.group(1)!.replaceAll('&amp;', '&');
-  String? pick(String name) {
-    final r = RegExp(
-      '<input[^>]*name="$name"[^>]*value="([^"]*)"',
-      caseSensitive: false,
-    ).firstMatch(html);
-    return r?.group(1);
-  }
-
+  final doc = html_parser.parse(html);
+  final form = doc.querySelector('form#fastpostform') ??
+      doc.querySelector('form[name="fastpostform"]');
+  if (form == null) return null;
+  final action = form.attributes['action']?.replaceAll('&amp;', '&');
+  if (action == null || action.isEmpty) return null;
+  String? hidden(String name) =>
+      form.querySelector('input[name="$name"]')?.attributes['value'];
   return (
     action: action,
-    formhash: pick('formhash') ?? parseFormhash(html),
-    posttime: pick('posttime'),
+    formhash: hidden('formhash') ?? parseFormhash(html),
+    posttime: hidden('posttime'),
   );
 }
 
