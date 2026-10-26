@@ -9,7 +9,7 @@ Future<void> main() async {
 
   // Test 1: Offline parser with real HTML sample
   print('== 1. Offline parser test ==');
-  final sample = '<html><body>'
+  const sample = '<html><body>'
       '<dl class="result-list">'
       '<dt><a href="https://ycoo.net/forum.php?mod=viewthread&tid=61974&highlight=%E7%95%AA%E8%8C%84&page=1&extra=#pid1176508" target="_blank">'
       '<h4>91 <em>番茄</em>更新 <small>[81%]</small></h4></a></dt>'
