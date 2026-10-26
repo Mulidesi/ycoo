@@ -196,6 +196,102 @@ ThreadPage parseThreadList(String html, {int page = 1}) {
   return ThreadPage(items: items, page: page, totalPages: _parseTotalPages(doc, page));
 }
 
+/// 解析 twpx_xunsearch 插件搜索结果页。
+///
+/// 站点用 xunsearch 替代了 Discuz 原生 search.php，返回的 HTML 结构：
+///   <dl class="result-list">
+///     <dt><a href="...tid=XXXX..."><h4>91 <em>番茄</em>更新 <small>[81%]</small></h4></a></dt>
+///     <dd>
+///       <p>摘要...</p>
+///       <p class="field-info"><span>发帖时间:2025-8-29</span><span>作者:<a href="...uid=...">妍希</a></span><span><a href="...fid=2">书源发布</a></span></p>
+///     </dd>
+///   </dl>
+/// 标题前的数字是搜索结果序号，[81%] 是匹配度，都需要去掉。
+ThreadPage parseXunsearchResults(String html, {int page = 1}) {
+  final doc = html_parser.parse(html);
+  final items = <ThreadItem>[];
+
+  for (final dl in doc.querySelectorAll('dl.result-list')) {
+    for (final dt in dl.querySelectorAll('dt')) {
+      final a = dt.querySelector('a[href*="tid="]');
+      if (a == null) continue;
+      final href = a.attributes['href'] ?? '';
+      final tidM = RegExp(r'tid=(\d+)').firstMatch(href);
+      if (tidM == null) continue;
+      final tid = int.parse(tidM.group(1)!);
+
+      // 标题在 <h4> 里：序号 + <em>关键词</em> + 标题 + <small>[匹配度%]</small>
+      var title = _text(dt.querySelector('h4'))
+          .replaceFirst(RegExp(r'^\d+\s*'), '')
+          .replaceAll(RegExp(r'\s*\[\d+%\]\s*$'), '')
+          .trim();
+      if (title.isEmpty) title = _text(a);
+      if (title.isEmpty) continue;
+
+      // <dd> 里的 field-info 包含作者和版块
+      final dd = dt.nextElementSibling;
+      String? author;
+      int? authorId;
+      var fid = 0;
+      String? typeName;
+      String? timeText;
+
+      if (dd != null) {
+        final fieldInfo = dd.querySelector('p.field-info');
+        if (fieldInfo != null) {
+          // 作者
+          final authorLink = fieldInfo.querySelector('a[href*="uid="]');
+          if (authorLink != null) {
+            author = _text(authorLink);
+            authorId = _uidFromHref(authorLink.attributes['href']);
+          }
+          // 版块
+          final boardLink = fieldInfo.querySelector('a[href*="fid="]');
+          if (boardLink != null) {
+            typeName = _text(boardLink);
+            final fm = RegExp(r'fid=(\d+)').firstMatch(boardLink.attributes['href'] ?? '');
+            if (fm != null) fid = int.parse(fm.group(1)!);
+          }
+          // 发帖时间
+          final timeTextEl = fieldInfo.querySelector('span');
+          if (timeTextEl != null) {
+            timeText = _text(timeTextEl).replaceFirst(RegExp(r'^发帖时间[:：]\s*'), '');
+          }
+        }
+      }
+
+      items.add(ThreadItem(
+        tid: tid,
+        title: title,
+        url: absoluteUrl(href),
+        author: author,
+        authorId: authorId,
+        replies: 0,
+        views: 0,
+        timeText: timeText,
+        typeName: typeName,
+        fid: fid == 0 ? null : fid,
+      ));
+    }
+  }
+
+  // 解析分页
+  var totalPages = page;
+  for (final li in doc.querySelectorAll('ul.pagination li a')) {
+    final h = li.attributes['href'] ?? '';
+    final m = RegExp(r'[?&]p=(\d+)').firstMatch(h);
+    if (m != null) totalPages = math.max(totalPages, int.parse(m.group(1)!));
+  }
+  // 总数提示：「大约有 2,310 项符合查询结果」
+  final totalM = RegExp(r'大约有\s*([\d,]+)\s*项').firstMatch(doc.documentElement?.outerHtml ?? '');
+  if (totalM != null) {
+    final total = int.tryParse(totalM.group(1)!.replaceAll(',', '')) ?? 0;
+    if (total > 0) totalPages = math.max(totalPages, (total ~/ 10) + 1);
+  }
+
+  return ThreadPage(items: items, page: page, totalPages: totalPages);
+}
+
 int _parseTotalPages(Document doc, int page) {
   var total = page;
   final pageLabel = RegExp(r'共\s*(\d+)\s*页').firstMatch(doc.documentElement?.outerHtml ?? '');

@@ -61,23 +61,17 @@ class ForumApi {
     return parseThreadList(r.body, page: page);
   }
 
-  Future<List<ThreadItem>> search(String keyword) async {
-    final home = await client.get('forum.php');
-    final fh = parseFormhash(home.body);
-    if (fh == null) throw ForumException('无法获取搜索令牌');
-    final r = await client.post(
-      'search.php?mod=forum&searchsubmit=yes',
-      {'formhash': fh, 'srchtxt': keyword, 'searchsubmit': 'yes', 'srchfid': 'all'},
+  Future<List<ThreadItem>> search(String keyword, {int page = 1}) async {
+    final kw = Uri.encodeQueryComponent(keyword);
+    final r = await client.get(
+      'plugin.php?id=twpx_xunsearch&q=$kw&m=&syn=yes&f=_all&s=relevance&fid=0&p=$page',
       referer: '$kBaseUrl/forum.php',
     );
-    if (r.url.toString().contains('mod=logging')) {
-      throw ForumException('站点要求登录后才能搜索');
-    }
-    final page = parseThreadList(r.body);
-    if (page.items.isEmpty && r.body.contains('两次搜索')) {
+    final parsed = parseXunsearchResults(r.body, page: page);
+    if (parsed.items.isEmpty && r.body.contains('两次搜索')) {
       throw ForumException('搜索太频繁，请稍后再试');
     }
-    return page.items;
+    return parsed.items;
   }
 
   // ---------------------------------------------------------------- 帖子
