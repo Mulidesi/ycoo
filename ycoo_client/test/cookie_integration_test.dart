@@ -1,5 +1,6 @@
 // Integration test: ycoo.net cookies initialization
 // Run with: dart test/test/cookie_integration_test.dart
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ycoo_client/core/discuz_client.dart';
 import 'package:ycoo_client/state/app_state.dart';
@@ -33,29 +34,41 @@ void main() {
       final client = DiscuzClient(baseUrl: 'https://ycoo.net');
 
       // Simulate SecureStore with provided cookies
+      // Use MemorySecureStore (local fallback) since FlutterSecureStore not available in test
       final secureStore = MemorySecureStore();
       final cookiesKey = secureCookiesKey('ycoo'); // siteId
       secureStore.write(cookiesKey, jsonEncode(cookies));
 
       // Create AppState and restore cookies
-      final state = AppState(client: client, baseUrl: 'https://ycoo.net');
+      // Pass the secureStore via constructor
+      final state = AppState(
+        client: client,
+        baseUrl: 'https://ycoo.net',
+        secureStore: secureStore,
+      );
 
       // Manually restore cookies from SecureStore (simulating init flow)
+      // Use the site-specific key
       final restoreKey = secureCookiesKey('ycoo');
       final storedJson = secureStore.read(restoreKey);
-      
+
       if (storedJson != null && storedJson.isNotEmpty) {
         final parsed = jsonDecode(storedJson) as Map<String, dynamic>;
-        state.client.cookies = Map<String, String>.from(parsed);
-        // Persist to prefs layer
-        state._persistCookies();
+        // Load cookies into client via the CookieStore bucket mechanism
+        // _siteHost is accessible from test within same package
+        client.store.load(client._siteHost, parsed);
       }
 
-      // Verify cookies were restored
-      expect(state.client.cookies.length, greaterThan(0));
-      expect(state.client.cookies['YPSa_2132_sid'], equals('OJxzpo'));
-      expect(state.client.cookies['YPSa_2132_auth'], isNotNull);
-      expect(state.client.cookies['YPSa_2132_lastvisit'], equals('1791442934'));
+      // Verify cookies were restored via the snapshot getter
+      final snapshotCookies = client.store.snapshot(client._siteHost);
+      expect(snapshotCookies.length, greaterThan(0));
+      expect(snapshotCookies['YPSa_2132_sid'], equals('OJxzpo'));
+      expect(snapshotCookies['YPSa_2132_auth'], isNotNull);
+      expect(snapshotCookies['YPSa_2132_lastvisit'], equals('1791442934'));
+
+      // Also verify client.cookies getter works
+      expect(client.cookies.length, greaterThan(0));
+      expect(client.cookies['YPSa_2132_sid'], equals('OJxzpo'));
 
       // Verify user is set (from cookie context)
       expect(state.user, isNotNull);
@@ -65,12 +78,15 @@ void main() {
       final client1 = DiscuzClient(baseUrl: 'https://ycoo.net');
       final client2 = DiscuzClient(baseUrl: 'https://example.com');
 
-      final bucket1 = 'cookies.ycoo';
-      final bucket2 = 'cookies.example';
-
-      // Each site gets its own bucket
-      expect(bucket1, equals('cookies.ycoo'));
-      expect(bucket2, equals('cookies.example'));
+      // Each site gets its own bucket via normalizeHost
+      final bucket1 = client1.store.snapshot(client1._siteHost);
+      final bucket2 = client2.store.snapshot(client2._siteHost);
+      // Buckets should be independent - at minimum, different host names
+      expect(bucket1.keys.length, greaterThan(0));
+      expect(bucket2.keys.length, greaterThan(0));
+      // The normalized host should differ
+      expect(client1._siteHost, equals('ycoo.net'));
+      expect(client2._siteHost, equals('example.com'));
     });
   });
 }
