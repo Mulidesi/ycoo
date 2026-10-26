@@ -93,7 +93,8 @@ jobs:
       - name: Verify APK signatures
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
-          for apk in build/app/outputs/flutter-apk/app-release-*.apk; do
+          for apk in build/app/outputs/flutter-apk/app-*-release.apk; do
+            [ -f "$apk" ] || continue
             "$APKSIGNER" verify --print-certs "$apk"
           done
 
@@ -104,9 +105,10 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           cd build/app/outputs/flutter-apk
           ls -lh
-          for apk in app-release-*.apk; do
-            abi="${apk#app-release-}"
-            abi="${abi%.apk}"
+          for apk in app-*-release.apk; do
+            [ -f "$apk" ] || continue
+            abi="${apk#app-}"
+            abi="${abi%-release.apk}"
             cp "$apk" "ycoo-client-${VERSION}-${abi}.apk"
           done
 
@@ -127,7 +129,9 @@ jobs:
           TAG="v${VERSION}"
           PY_ARGS="$VERSION"
           for apk in build/app/outputs/flutter-apk/ycoo-client-${VERSION}-*.apk; do
-            abi="$(basename "$apk" | sed 's/^.*-\([^-]*\)\.apk$/\1/')"
+            [ -f "$apk" ] || continue
+            abi="${apk#*ycoo-client-${VERSION}-}"
+            abi="${abi%.apk}"
             size="$(stat -c%s "$apk")"
             sha="$(sha256sum "$apk" | awk '{print $1}')"
             PY_ARGS="$PY_ARGS $abi $size $sha"
