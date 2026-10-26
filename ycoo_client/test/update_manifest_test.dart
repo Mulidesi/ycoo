@@ -100,6 +100,74 @@ void main() {
       expect(parseLatestManifest('not json'), isNull);
       expect(parseLatestManifest('{}'), isNull);
     });
+
+    test('apks 数组按 ABI 匹配', () {
+      final body = jsonEncode({
+        'version': '1.1.3',
+        'tag': 'v1.1.3',
+        'apks': [
+          {
+            'abi': 'arm64-v8a',
+            'url': 'https://github.com/a/arm64.apk',
+            'size': 111,
+            'sha256': 'aaa',
+          },
+          {
+            'abi': 'armeabi-v7a',
+            'url': 'https://github.com/a/arm.apk',
+            'size': 222,
+            'sha256': 'bbb',
+          },
+          {
+            'abi': 'x86_64',
+            'url': 'https://github.com/a/x64.apk',
+            'size': 333,
+            'sha256': 'ccc',
+          },
+        ],
+        'notes': '## 更新\n- 修复搜索',
+      });
+      final info = parseLatestManifest(body, targetAbi: 'armeabi-v7a');
+      expect(info, isNotNull);
+      expect(info!.version, '1.1.3');
+      expect(info.abi, 'armeabi-v7a');
+      expect(info.size, 222);
+      expect(info.sha256, 'bbb');
+      expect(info.apkUrl, 'https://github.com/a/arm.apk');
+    });
+
+    test('apks 数组未匹配时回退到 arm64-v8a', () {
+      final body = jsonEncode({
+        'version': '1.1.3',
+        'apks': [
+          {'abi': 'arm64-v8a', 'url': 'https://github.com/a/arm64.apk', 'size': 111},
+          {'abi': 'x86_64', 'url': 'https://github.com/a/x64.apk', 'size': 333},
+        ],
+      });
+      final info = parseLatestManifest(body, targetAbi: 'armeabi-v7a');
+      expect(info, isNotNull);
+      expect(info!.abi, 'arm64-v8a');
+      expect(info.size, 111);
+    });
+
+    test('apks 数组回退到第一项', () {
+      final body = jsonEncode({
+        'version': '1.1.3',
+        'apks': [
+          {'abi': 'x86_64', 'url': 'https://github.com/a/x64.apk', 'size': 333},
+        ],
+      });
+      final info = parseLatestManifest(body, targetAbi: 'arm64-v8a');
+      expect(info, isNotNull);
+      expect(info!.abi, 'x86_64');
+      expect(info.size, 333);
+    });
+
+    test('兼容旧版单 APK 格式', () {
+      final info = parseLatestManifest(jsonEncode(manifest()));
+      expect(info, isNotNull);
+      expect(info!.abi, isNull);
+    });
   });
 
   group('GitHub API 解析', () {
@@ -139,6 +207,44 @@ void main() {
         ],
       }));
       expect(info, isNull);
+    });
+
+    test('GitHub API 按 ABI 过滤 APK 资源', () {
+      final body = jsonEncode({
+        'tag_name': 'v1.1.3',
+        'assets': [
+          {
+            'name': 'ycoo-client-1.1.3-arm64-v8a.apk',
+            'size': 111,
+            'browser_download_url': 'https://github.com/a/arm64.apk',
+          },
+          {
+            'name': 'ycoo-client-1.1.3-armeabi-v7a.apk',
+            'size': 222,
+            'browser_download_url': 'https://github.com/a/arm.apk',
+          },
+        ],
+      });
+      final info = parseGitHubRelease(body, targetAbi: 'armeabi-v7a');
+      expect(info, isNotNull);
+      expect(info!.abi, 'armeabi-v7a');
+      expect(info.size, 222);
+    });
+
+    test('GitHub API 未匹配 ABI 时回退到第一个 APK', () {
+      final body = jsonEncode({
+        'tag_name': 'v1.1.3',
+        'assets': [
+          {
+            'name': 'ycoo-client-1.1.3-arm64-v8a.apk',
+            'size': 111,
+            'browser_download_url': 'https://github.com/a/arm64.apk',
+          },
+        ],
+      });
+      final info = parseGitHubRelease(body, targetAbi: 'x86_64');
+      expect(info, isNotNull);
+      expect(info!.size, 111);
     });
   });
 

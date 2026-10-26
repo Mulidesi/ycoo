@@ -33,6 +33,7 @@ class ReleaseInfo {
     this.sha256,
     this.notes = '',
     this.publishedAt,
+    this.abi,
   });
 
   /// 纯版本号，如 `1.0.17`。
@@ -43,6 +44,7 @@ class ReleaseInfo {
   final String? sha256;
   final String notes;
   final String? publishedAt;
+  final String? abi;
 
   String get displayTag => tag ?? 'v$version';
 
@@ -135,10 +137,72 @@ int? _readInt(Map<dynamic, dynamic> map, List<String> keys) {
   return null;
 }
 
-ReleaseInfo? _fromMap(Map<dynamic, dynamic> map) {
+ReleaseInfo? _fromMap(Map<dynamic, dynamic> map, String? targetAbi) {
   final version = normalizeVersion(
     _readString(map, const ['version', 'tag', 'tag_name']) ?? '',
   );
+
+  // 优先从 apks 数组中挑选匹配当前 ABI 的安装包
+  final apks = map['apks'];
+  if (apks is List && apks.isNotEmpty) {
+    for (final entry in apks) {
+      if (entry is! Map) continue;
+      final abi = _readString(entry, const ['abi']);
+      if (abi != null && abi == targetAbi) {
+        final url = _readString(entry, const ['url', 'apk_url', 'apkUrl']);
+        if (url != null && isSafeApkUrl(url)) {
+          return ReleaseInfo(
+            version: version,
+            apkUrl: url,
+            tag: _readString(map, const ['tag', 'tag_name']),
+            size: _readInt(entry, const ['size', 'apk_size', 'apkSize']),
+            sha256: _readString(entry, const ['sha256', 'apk_sha256', 'apkSha256']),
+            notes: _readString(map, const ['notes', 'body']) ?? '',
+            publishedAt: _readString(map, const ['published_at', 'publishedAt']),
+            abi: abi,
+          );
+        }
+      }
+    }
+    // 未匹配到 ABI 时回退到 arm64-v8a（最常见）
+    for (final entry in apks) {
+      if (entry is! Map) continue;
+      final abi = _readString(entry, const ['abi']);
+      if (abi == 'arm64-v8a') {
+        final url = _readString(entry, const ['url', 'apk_url', 'apkUrl']);
+        if (url != null && isSafeApkUrl(url)) {
+          return ReleaseInfo(
+            version: version,
+            apkUrl: url,
+            tag: _readString(map, const ['tag', 'tag_name']),
+            size: _readInt(entry, const ['size', 'apk_size', 'apkSize']),
+            sha256: _readString(entry, const ['sha256', 'apk_sha256', 'apkSha256']),
+            notes: _readString(map, const ['notes', 'body']) ?? '',
+            publishedAt: _readString(map, const ['published_at', 'publishedAt']),
+            abi: abi,
+          );
+        }
+      }
+    }
+    // 最后回退到数组第一项
+    final first = apks.first;
+    if (first is Map) {
+      final url = _readString(first, const ['url', 'apk_url', 'apkUrl']);
+      if (url != null && isSafeApkUrl(url)) {
+        return ReleaseInfo(
+          version: version,
+          apkUrl: url,
+          tag: _readString(map, const ['tag', 'tag_name']),
+          size: _readInt(first, const ['size', 'apk_size', 'apkSize']),
+          sha256: _readString(first, const ['sha256', 'apk_sha256', 'apkSha256']),
+          notes: _readString(map, const ['notes', 'body']) ?? '',
+          publishedAt: _readString(map, const ['published_at', 'publishedAt']),
+          abi: _readString(first, const ['abi']),
+        );
+      }
+    }
+  }
+
   final apkUrl = _readString(map, const ['apk_url', 'apkUrl', 'url']);
   if (version.isEmpty || apkUrl == null) return null;
   return ReleaseInfo(
@@ -153,16 +217,20 @@ ReleaseInfo? _fromMap(Map<dynamic, dynamic> map) {
 }
 
 /// 解析随 Release 上传的 `latest.json`。
-ReleaseInfo? parseLatestManifest(String body) {
+///
+/// [targetAbi] 为空时使用默认回退策略（arm64-v8a → 第一项）。
+ReleaseInfo? parseLatestManifest(String body, {String? targetAbi}) {
   final decoded = _tryDecode(body);
   if (decoded is! Map) return null;
-  final info = _fromMap(decoded);
+  final info = _fromMap(decoded, targetAbi);
   if (info == null || !isSafeApkUrl(info.apkUrl)) return null;
   return info;
 }
 
 /// 解析 GitHub Releases API (`/releases/latest`) 的响应。
-ReleaseInfo? parseGitHubRelease(String body) {
+///
+/// 当 [targetAbi] 非空时，优先挑选文件名中包含该 ABI 的 APK 资源。
+ReleaseInfo? parseGitHubRelease(String body, {String? targetAbi}) {
   final decoded = _tryDecode(body);
   if (decoded is! Map) return null;
   final version = normalizeVersion(
@@ -171,6 +239,28 @@ ReleaseInfo? parseGitHubRelease(String body) {
   if (version.isEmpty) return null;
   final assets = decoded['assets'];
   if (assets is! List) return null;
+
+  if (targetAbi != null && targetAbi.isNotEmpty) {
+    for (final asset in assets) {
+      if (asset is! Map) continue;
+      final name = _readString(asset, const ['name']) ?? '';
+      if (!name.contains(targetAbi)) continue;
+      final url = _readString(asset, const ['browser_download_url']);
+      if (!name.toLowerCase().endsWith('.apk') || url == null) continue;
+      if (!isSafeApkUrl(url)) continue;
+      return ReleaseInfo(
+        version: version,
+        apkUrl: url,
+        tag: _readString(decoded, const ['tag_name']),
+        size: _readInt(asset, const ['size']),
+        sha256: _readString(asset, const ['digest'])?.replaceFirst('sha256:', ''),
+        notes: _readString(decoded, const ['body']) ?? '',
+        publishedAt: _readString(decoded, const ['published_at']),
+        abi: targetAbi,
+      );
+    }
+  }
+
   for (final asset in assets) {
     if (asset is! Map) continue;
     final name = _readString(asset, const ['name']) ?? '';

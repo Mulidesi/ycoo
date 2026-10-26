@@ -46,6 +46,7 @@ class UpdateService {
 
   /// 拉取最新版本信息；全部线路失败时抛出 [UpdateException]。
   Future<ReleaseInfo> fetchLatest() async {
+    final targetAbi = _detectAbi();
     Object? lastError;
     for (final url in _manifestCandidates()) {
       try {
@@ -61,8 +62,9 @@ class UpdateService {
         }
         final body = _decodeBody(res);
         final isApi = Uri.parse(url).host == 'api.github.com';
-        final info =
-            isApi ? parseGitHubRelease(body) : parseLatestManifest(body);
+        final info = isApi
+            ? parseGitHubRelease(body, targetAbi: targetAbi)
+            : parseLatestManifest(body, targetAbi: targetAbi);
         if (info == null) throw UpdateException('更新信息格式异常');
         return info;
       } catch (e) {
@@ -70,6 +72,26 @@ class UpdateService {
       }
     }
     throw UpdateException('检查更新失败：$lastError');
+  }
+
+  /// 检测当前设备的 Android ABI。
+  ///
+  /// 返回 `arm64-v8a` / `armeabi-v7a` / `x86_64` 之一，
+  /// 非 Android 平台或无法检测时返回 null。
+  static String? _detectAbi() {
+    if (Platform.operatingSystem != 'android') return null;
+    final envAbi = Platform.environment['ANDROID_ABI'];
+    if (envAbi != null && envAbi.isNotEmpty) return envAbi;
+    final arch = Platform.environment['PROCESSOR_ARCHITECTURE'];
+    if (arch != null) {
+      return switch (arch) {
+        'AMD64' || 'x86_64' => 'x86_64',
+        'ARM64' || 'AARCH64' => 'arm64-v8a',
+        'ARM' => 'armeabi-v7a',
+        _ => null,
+      };
+    }
+    return null;
   }
 
   /// 下载 APK 到应用缓存目录，返回本地文件。

@@ -87,60 +87,86 @@ jobs:
           } > android/key.properties
           echo "已写入 release 签名配置"
 
-      - name: Build release APK
-        run: flutter build apk --release
+      - name: Build release APK (split per ABI)
+        run: flutter build apk --release --split-per-abi
 
-      - name: Verify APK signature
+      - name: Verify APK signatures
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
-          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+          for apk in build/app/outputs/flutter-apk/app-release-*.apk; do
+            "$APKSIGNER" verify --print-certs "$apk"
+          done
 
-      - name: Name APK by pubspec version
+      - name: Name APKs by pubspec version and ABI
         id: apk
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           cd build/app/outputs/flutter-apk
           ls -lh
-          cp app-release.apk "ycoo-client-${VERSION}.apk"
+          for apk in app-release-*.apk; do
+            abi="${apk#app-release-}"
+            abi="${abi%.apk}"
+            cp "$apk" "ycoo-client-${VERSION}-${abi}.apk"
+          done
 
-      - name: Upload APK (artifact)
+      - name: Upload APKs (artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: ycoo-client-apk
+          name: ycoo-client-apks
           path: ycoo_client/build/app/outputs/flutter-apk/ycoo-client-*.apk
           if-no-files-found: error
           retention-days: 30
 
       # 随 Release 上传 latest.json，供 App 内更新读取版本 / APK / 校验值
+      # 每个 ABI 一个独立 APK，manifest 内含 apks 数组，App 按当前 ABI 选择
       - name: Generate update manifest
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           VERSION="${{ steps.apk.outputs.version }}"
-          APK="build/app/outputs/flutter-apk/ycoo-client-${VERSION}.apk"
-          SIZE=$(stat -c%s "$APK")
-          SHA=$(sha256sum "$APK" | awk '{print $1}')
-          python3 - "$VERSION" "$SIZE" "$SHA" <<'PY'
+          TAG="v${VERSION}"
+          PY_ARGS="$VERSION"
+          for apk in build/app/outputs/flutter-apk/ycoo-client-${VERSION}-*.apk; do
+            abi="$(basename "$apk" | sed 's/^.*-\([^-]*\)\.apk$/\1/')"
+            size="$(stat -c%s "$apk")"
+            sha="$(sha256sum "$apk" | awk '{print $1}')"
+            PY_ARGS="$PY_ARGS $abi $size $sha"
+          done
+          python3 - "$PY_ARGS" <<'PY'
           import json
           import sys
 
-          version, size, sha = sys.argv[1], sys.argv[2], sys.argv[3]
+          args = sys.argv[1:]
+          version = args[0]
           tag = f"v{version}"
+          apks = []
+          for i in range(1, len(args), 3):
+              abi, size, sha = args[i], args[i + 1], args[i + 2]
+              apks.append({
+                  "abi": abi,
+                  "url": (
+                      f"https://github.com/Mulidesi/ycoo/releases/download/"
+                      f"{tag}/ycoo-client-{version}-{abi}.apk"
+                  ),
+                  "size": int(size),
+                  "sha256": sha,
+              })
+
           notes = (
               "## 安装包\n\n"
               f"- `ycoo-client-{version}.apk`（Android，minSdk 24）\n"
               "- 支持 ABI：arm64-v8a / armeabi-v7a / x86_64\n"
               "- 使用固定 release 签名，可直接覆盖安装后续版本"
           )
+
+          arm64 = next((a for a in apks if a["abi"] == "arm64-v8a"), apks[0])
           manifest = {
               "version": version,
               "tag": tag,
-              "apk_url": (
-                  f"https://github.com/Mulidesi/ycoo/releases/download/"
-                  f"{tag}/ycoo-client-{version}.apk"
-              ),
-              "size": int(size),
-              "sha256": sha,
+              "apk_url": arm64["url"],
+              "size": arm64["size"],
+              "sha256": arm64["sha256"],
+              "apks": apks,
               "notes": notes,
           }
           with open("latest.json", "w", encoding="utf-8") as f:
@@ -162,6 +188,7 @@ jobs:
           body: |
             ## 安装包
 
-            - `ycoo-client-${{ steps.apk.outputs.version }}.apk`（Android，minSdk 24）
-            - 支持 ABI：arm64-v8a / armeabi-v7a / x86_64
-            - 使用固定 release 签名，可直接覆盖安装后续版本
+            - `ycoo-client-${{ steps.apk.outputs.version }}-arm64-v8a.apk`（arm64 设备）
+            - `ycoo-client-${{ steps.apk.outputs.version }}-armeabi-v7a.apk`（32 位 ARM 设备）
+            - `ycoo-client-${{ steps.apk.outputs.version }}-x86_64.apk`（x86_64 模拟器/平板）
+            - minSdk 24，使用固定 release 签名，可直接覆盖安装后续版本
