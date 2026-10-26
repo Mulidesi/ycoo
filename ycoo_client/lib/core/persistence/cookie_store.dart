@@ -39,16 +39,20 @@ class CookieStore {
     if (setCookieHeader == null || setCookieHeader.isEmpty) return;
     final key = normalizeHost(host);
     final bucket = _buckets.putIfAbsent(key, () => <String, String>{});
-    // Set-Cookie headers are joined with ", " — split into individual cookies.
-    // Each cookie: name=value; path=/; expires=... — only extract name=value
-    // before any ";" so attributes don't pollute the store.
-    for (final cookieStr in setCookieHeader.split(', ')) {
-      final firstSegment = cookieStr.split(';').first.trim();
-      final eq = firstSegment.indexOf('=');
-      if (eq <= 0) continue;
-      final name = firstSegment.substring(0, eq).trim();
-      final value = firstSegment.substring(eq + 1).trim();
+    // Set-Cookie headers are joined with "," (no space) by the http package,
+    // but `expires` dates contain ", " (comma+space). Splitting by ", " would
+    // break on dates and lose cookies. Instead, match all name=value pairs
+    // and skip known cookie attributes.
+    final regex = RegExp(r'([^,;=\s]+)=([^,;]+?)(?=;|,|$)');
+    for (final m in regex.allMatches(setCookieHeader)) {
+      final name = m.group(1)!;
+      final value = m.group(2)!.trim();
       if (name.isEmpty) continue;
+      // Skip cookie attributes (expires, path, domain, secure, httponly, max-age, samesite)
+      if ({'expires', 'path', 'domain', 'secure', 'httponly', 'max-age', 'samesite'}
+          .contains(name.toLowerCase())) {
+        continue;
+      }
       bucket[name] = value;
     }
   }

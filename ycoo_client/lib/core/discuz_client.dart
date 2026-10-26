@@ -95,7 +95,9 @@ class DiscuzClient {
     final host = (r.request?.url ?? Uri.parse(baseUrl)).host;
     if (!_sameSite(host)) return;
     final sc = r.headers['set-cookie'];
-    if (sc != null && sc.isNotEmpty) store.absorb(_siteHost, sc);
+    if (sc != null && sc.isNotEmpty) {
+      store.absorb(_siteHost, sc);
+    }
   }
 
   String _decode(http.Response r) {
