@@ -31,8 +31,12 @@ Future<void> main(List<String> args) async {
   print('\n== 2. 登录 ==  success=${login.success} msg=${login.message}');
 
   print('\n== 3. 不存在的主题（错误提示是否透传） ==');
-  final bad = await api.reply(tid: 999999999, fid: 39, message: 'test');
-  print('success=${bad.success} message=${bad.message}');
+  try {
+    final bad = await api.reply(tid: 999999999, fid: 39, message: 'test');
+    print('success=${bad.success} message=${bad.message}');
+  } catch (e) {
+    print('threw: $e');
+  }
 
   if (args.contains('--live')) {
     final tid = int.parse(args[args.indexOf('--live') + 1]);
