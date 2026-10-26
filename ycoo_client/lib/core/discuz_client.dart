@@ -1,7 +1,7 @@
 /// 带 Cookie 持久化的 Discuz! HTTP 客户端。
 ///
 /// package:http 不自带 Cookie 管理，而 Discuz 的会话完全依赖 Cookie
-/// （形如 `YPSa_2132_auth`），所以这里自己维护一份 name→value 表。
+/// （形如 `YPSa_2132_auth`），所以这里按 host 分桶维护。
 library;
 
 import 'dart:async';
@@ -10,14 +10,21 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import '../data/parsers.dart';
+import 'error/app_exception.dart';
+import 'persistence/cookie_store.dart';
 
-class ForumException implements Exception {
-  final String message;
+/// 过渡别名：业务错误继续用这个类型，下一个小版本删除。
+class ForumException extends AppException {
+  ForumException(String message, {this.network = false})
+      : super(
+          network ? AppErrorKind.network : AppErrorKind.unknown,
+          message: message,
+        );
+
   final bool network;
-  ForumException(this.message, {this.network = false});
+
   @override
-  String toString() => message;
+  String toString() => message ?? 'ForumException';
 }
 
 class DResponse {
@@ -29,39 +36,54 @@ class DResponse {
 }
 
 class DiscuzClient {
-  DiscuzClient({http.Client? client}) : _client = client ?? http.Client();
+  DiscuzClient({
+    required this.baseUrl,
+    http.Client? client,
+    CookieStore? store,
+  })  : _client = client ?? http.Client(),
+        store = store ?? CookieStore();
 
+  /// 当前站点根地址（不带尾部斜杠）。
+  ///
+  /// P13 起由 Client 自持；切站时 SiteManager/AppState 更新此值并清理旧 Cookie。
+  String baseUrl;
   final http.Client _client;
-  final Map<String, String> _cookies = {};
+  final CookieStore store;
 
   static const String userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-  Map<String, String> get cookies => Map.unmodifiable(_cookies);
-  bool get hasSession => _cookies.keys.any((k) => k.endsWith('_auth'));
+  String get _siteHost => Uri.parse(baseUrl).host;
+
+  Map<String, String> get cookies => store.snapshot(_siteHost);
+  bool get hasSession => store.hasSession(_siteHost);
 
   /// 拼好的 Cookie 头，供图片加载等场景复用登录态
-  String get cookieHeader =>
-      _cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+  String get cookieHeader => store.headerFor(_siteHost) ?? '';
 
-  void loadCookies(Map<String, String> c) {
-    _cookies
-      ..clear()
-      ..addAll(c);
-  }
+  void loadCookies(Map<String, String> c) => store.load(_siteHost, c);
 
-  void clearCookies() => _cookies.clear();
+  void clearCookies() => store.clear(_siteHost);
 
-  Map<String, String> _headers({bool ajax = false, String? referer, Map<String, String>? extra}) {
+  bool _sameSite(String host) =>
+      CookieStore.normalizeHost(host) == CookieStore.normalizeHost(_siteHost);
+
+  Map<String, String> _headers({
+    required Uri uri,
+    bool ajax = false,
+    String? referer,
+    Map<String, String>? extra,
+  }) {
     final h = <String, String>{
       'User-Agent': userAgent,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       'Cache-Control': 'no-cache',
     };
-    if (_cookies.isNotEmpty) {
-      h['Cookie'] = _cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+    if (_sameSite(uri.host)) {
+      final cookie = store.headerFor(_siteHost);
+      if (cookie != null && cookie.isNotEmpty) h['Cookie'] = cookie;
     }
     if (ajax) h['X-Requested-With'] = 'XMLHttpRequest';
     if (referer != null) h['Referer'] = referer;
@@ -70,22 +92,9 @@ class DiscuzClient {
   }
 
   void _absorb(http.Response r) {
-    final raw = r.headers['set-cookie'];
-    if (raw == null || raw.isEmpty) return;
-    // 多个 Set-Cookie 被 http 包用 ", " 拼在一起，但 expires 里也含逗号，
-    // 因此只在“逗号 + name=”处切分。
-    for (final part in raw.split(RegExp(r',(?=\s*[A-Za-z0-9_\-]+=)'))) {
-      final kv = part.split(';').first.trim();
-      final i = kv.indexOf('=');
-      if (i <= 0) continue;
-      final name = kv.substring(0, i).trim();
-      final value = kv.substring(i + 1).trim();
-      if (value.isEmpty) {
-        _cookies.remove(name);
-      } else {
-        _cookies[name] = value;
-      }
-    }
+    final host = (r.request?.url ?? Uri.parse(baseUrl)).host;
+    if (!_sameSite(host)) return;
+    store.absorb(_siteHost, r.headers['set-cookie']);
   }
 
   String _decode(http.Response r) {
@@ -96,6 +105,66 @@ class DiscuzClient {
     }
   }
 
+  void _throwIfMapped(int status) {
+    switch (status) {
+      case 401:
+        throw AppException.unauthorized();
+      case 403:
+        throw AppException.forbidden();
+      case 404:
+        throw AppException.notFound();
+      default:
+        if (status >= 500) {
+          throw AppException.server(statusCode: status);
+        }
+    }
+  }
+
+  Future<http.Response> _exchange({
+    required String method,
+    required Uri uri,
+    required Map<String, String> headers,
+    Map<String, String>? body,
+  }) async {
+    var currentMethod = method;
+    var currentUri = uri;
+    final currentHeaders = Map<String, String>.from(headers);
+    Map<String, String>? currentBody = body;
+
+    for (var hop = 0; hop < 5; hop++) {
+      final req = http.Request(currentMethod, currentUri)
+        ..followRedirects = false
+        ..headers.addAll(currentHeaders);
+      if (currentBody != null) {
+        req.bodyFields = currentBody;
+      }
+      final streamed =
+          await _client.send(req).timeout(const Duration(seconds: 25));
+      if (streamed.statusCode >= 300 && streamed.statusCode < 400) {
+        final location = streamed.headers['location'];
+        await streamed.stream.drain<void>();
+        if (location == null || location.isEmpty) {
+          return http.Response(
+            '',
+            streamed.statusCode,
+            headers: streamed.headers,
+            request: req,
+          );
+        }
+        final next = currentUri.resolve(location);
+        if (!_sameSite(next.host)) {
+          currentHeaders.remove('Cookie');
+        }
+        currentUri = next;
+        currentMethod = 'GET';
+        currentBody = null;
+        continue;
+      }
+      return http.Response.fromStream(streamed);
+    }
+    throw AppException.network(message: '重定向过多');
+  }
+
   /// [absorbCookies] 为 false 时不吸收响应里的 Set-Cookie。
   /// 移动端 JSON 接口会重新下发 `saltkey` 等 Cookie，没必要让它干扰登录态。
   Future<DResponse> get(
@@ -104,19 +173,24 @@ class DiscuzClient {
     bool ajax = false,
     bool absorbCookies = true,
   }) async {
-    final uri = Uri.parse(path.startsWith('http') ? path : '$kBaseUrl/$path');
+    final uri = Uri.parse(path.startsWith('http') ? path : '$baseUrl/$path');
     try {
-      final r = await _client
-          .get(uri, headers: _headers(ajax: ajax, referer: referer))
-          .timeout(const Duration(seconds: 25));
+      final r = await _exchange(
+        method: 'GET',
+        uri: uri,
+        headers: _headers(uri: uri, ajax: ajax, referer: referer),
+      );
       if (absorbCookies) _absorb(r);
+      _throwIfMapped(r.statusCode);
       return DResponse(r.statusCode, _decode(r), r.request?.url ?? uri);
+    } on AppException {
+      rethrow;
     } on TimeoutException {
-      throw ForumException('请求超时，请检查网络后重试', network: true);
+      throw AppException.timeout();
     } on SocketException {
-      throw ForumException('网络连接失败，请检查网络或代理设置', network: true);
+      throw AppException.network();
     } on http.ClientException catch (e) {
-      throw ForumException('网络请求失败：${e.message}', network: true);
+      throw AppException.network(message: e.message, cause: e);
     }
   }
 
@@ -126,19 +200,25 @@ class DiscuzClient {
     String? referer,
     bool ajax = true,
   }) async {
-    final uri = Uri.parse(path.startsWith('http') ? path : '$kBaseUrl/$path');
+    final uri = Uri.parse(path.startsWith('http') ? path : '$baseUrl/$path');
     try {
-      final r = await _client
-          .post(uri, headers: _headers(ajax: ajax, referer: referer), body: body)
-          .timeout(const Duration(seconds: 25));
+      final r = await _exchange(
+        method: 'POST',
+        uri: uri,
+        headers: _headers(uri: uri, ajax: ajax, referer: referer),
+        body: body,
+      );
       _absorb(r);
+      _throwIfMapped(r.statusCode);
       return DResponse(r.statusCode, _decode(r), r.request?.url ?? uri);
+    } on AppException {
+      rethrow;
     } on TimeoutException {
-      throw ForumException('请求超时，请检查网络后重试', network: true);
+      throw AppException.timeout();
     } on SocketException {
-      throw ForumException('网络连接失败，请检查网络或代理设置', network: true);
+      throw AppException.network();
     } on http.ClientException catch (e) {
-      throw ForumException('网络请求失败：${e.message}', network: true);
+      throw AppException.network(message: e.message, cause: e);
     }
   }
 
