@@ -37,7 +37,7 @@ class DResponse {
 
 class DiscuzClient {
   DiscuzClient({
-    required this.baseUrl,
+    this.baseUrl = 'https://ycoo.net',
     http.Client? client,
     CookieStore? store,
   })  : _client = client ?? http.Client(),
