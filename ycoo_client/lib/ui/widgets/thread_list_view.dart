@@ -94,8 +94,9 @@ class _ThreadListViewState extends State<ThreadListView>
       if (!mounted) return;
       setState(() {
         if (page == 1) _items.clear();
-        _items
-            .addAll(res.items.where((e) => !_items.any((x) => x.tid == e.tid)));
+        _items.addAll(
+          res.items.where((e) => !_items.any((x) => x.tid == e.tid)),
+        );
         _page = res.page;
         _totalPages = res.totalPages;
         _initialLoading = false;
@@ -121,17 +122,17 @@ class _ThreadListViewState extends State<ThreadListView>
     super.build(context);
     // 悬浮底栏盖在内容之上，列表底部要留出它的高度（二级页面为 0）
     final barInset = BottomBarInset.of(context);
-    if (_initialLoading) return const LoadingList();
+    if (_initialLoading) return const SkeletonList();
     if (_error != null && _items.isEmpty) {
       return ErrorView(message: _error!, onRetry: () => _load(1));
     }
-    final filter =
-        context.select<AppState, ({bool enabled, List<String> keywords})>(
-      (st) => (
-        enabled: st.settings.postFilterEnabled,
-        keywords: st.settings.postFilterKeywords,
-      ),
-    );
+    final filter = context
+        .select<AppState, ({bool enabled, List<String> keywords})>(
+          (st) => (
+            enabled: st.settings.postFilterEnabled,
+            keywords: st.settings.postFilterKeywords,
+          ),
+        );
     final visible = filterThreadsByKeywords(
       _items,
       enabled: filter.enabled,
@@ -170,7 +171,7 @@ class _ThreadListViewState extends State<ThreadListView>
     }
 
     final store = _previews;
-    if (store == null) return const LoadingList();
+    if (store == null) return const SkeletonList();
 
     return AnimatedBuilder(
       animation: store,
@@ -235,9 +236,10 @@ class _ThreadListViewState extends State<ThreadListView>
         padding: EdgeInsets.symmetric(vertical: 18),
         child: Center(
           child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2)),
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       );
     }

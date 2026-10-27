@@ -190,6 +190,43 @@
 - [x] 发布 v1.1.5+26：修复关注按钮后重打包
 - 真实接口实测（等级显示 / 关注取关 / 回帖列表 / 粉丝列表）待客户端联网后确认；沙箱访问站点 TLS 间歇失败
 
+## P14 — 用户反馈：搜索筛选 / 首页返回空白（v1.1.6 待定）
+
+> 来源：GitHub Issues（2026-10-27）。#1 搜索无法像网页端筛选；#2 从版块页点回首页出现短暂空白。
+> 参考链接为 ycoo.net（主域名），接口为 Discuz! X3.5 + twpx_xunsearch 插件标准格式，实现时一律 `kBaseUrl` 拼相对路径，禁止硬编码域名。
+
+### 搜索筛选（Issue #1）
+
+> 现状核实：
+> - 当前 `ForumApi.search` 固定参数 `plugin.php?id=twpx_xunsearch&q=$kw&m=&syn=yes&f=_all&s=relevance&fid=0&p=$page`（forum_api.dart:64-75），无任何筛选 UI。
+> - 网页端筛选条件（实测 search.php 表单 HTML）：
+>   - 搜索范围 `f`：全文 `_all` / 标题 `subject` / 用户名 `author`
+>   - 模糊搜索 `m`：checkbox，勾选时提交 `m=yes`
+>   - 同义词 `syn`：checkbox，默认勾选 `syn=yes`
+>   - 排序 `s`：相关性 `relevance` / 时间倒序 `dateline_DESC` / 时间顺序 `dateline_ASC`
+>   - 版块 `fid`：空=所有版块，否则指定版块 id（表单 optgroup 分组：书源交流/网络资源/小说专区/综合交流/福利娱乐/日常站务/广播专区）
+> - 版块列表数据已有 `api.boards()`（BoardsPage 使用），`loadBoards` 已导出供搜索页复用（boards_page.dart:301-302）
+> - 解析器 `parseXunsearchResults` 已解析 fid/作者/时间/标题，结果结构无需改
+
+- [x] R1 搜索范围筛选：全文 / 标题 / 用户名（SegmentedButton），映射 `f=_all|subject|author`
+- [x] R2 排序筛选：相关性（默认）/ 时间倒序 / 时间顺序，映射 `s=relevance|dateline_DESC|dateline_ASC`
+- [x] R3 版块筛选：所有版块 + 站点版块分组列表（复用 `api.boards()`，选择器用底部弹层按分组列出），映射 `fid`（空=所有版块）
+- [x] R4 模糊搜索开关（默认关）、同义词开关（默认开，与网页一致），映射 `m=yes` / `syn=yes`
+- [x] R5 筛选 UI：搜索结果页顶部筛选条（SegmentedButton + ActionChip 排序/版块 + FilterChip 开关），任一条件变更自动重新搜索
+- [x] R6 `ForumApi.search` 扩展可选参数 `{searchField, sortBy, fid, fuzzy, synonym}`，缺省沿用现默认值
+- [x] 边界：筛选后无结果 → EmptyView 文案区分「没有找到相关帖子」与「没有符合条件的帖子，试试调整筛选」；私密版块无权限站点返回空，正常降级
+- [x] 验证：`flutter analyze` 0 issue；`flutter test` 全过（155 过 + 1 项因缺 recon 样本跳过），新增 `test/search_filter_test.dart` 6 例覆盖 URL 拼装/解析/频率限制 + `test/search_page_test.dart` 2 例筛选条 widget 冒烟
+
+### 首页返回空白（Issue #2）
+
+> 现状核实（根因）：
+> - 底栏点「首页」→ `selectHomeTab(0)` → `homeRefreshTick++`（app_state.dart:73-75）→ FeedPage `_onStateChanged`（feed_page.dart:59-67）→ `_refreshTicks[view]++` → ThreadListView 的 `ValueKey` 变化（feed_page.dart:148）→ 列表组件销毁重建 → `_initialLoading=true` → 整屏 LoadingList 转圈，网络期间呈现空白。
+> - HomeShell 的 IndexedStack 保活 FeedPage，但列表因 key 变化被重建，已加载数据丢弃。
+
+- [x] R1 切回首页保留强制重建刷新（用户确认可接受），重建期间用骨架屏动画占位，不再整屏空白
+- [x] R2 骨架屏为微光扫过动画，卡片布局对齐 ThreadTile（头像/作者行/标题/摘要/首图/数据行），替换 ThreadListView 空白加载态；骨架色走语义 token（surfaceContainerHigh + surfaceDim），新增 `test/skeleton_test.dart` 2 例
+- [x] 验证：`flutter analyze` 0 issue；`flutter test` 全过（147 过 + 新增 2 例，1 项因缺 recon 样本跳过）
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过

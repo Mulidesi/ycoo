@@ -27,7 +27,10 @@ class ForumApi {
   }
 
   Future<ThreadPage> threads({required int fid, int page = 1}) async {
-    final r = await client.get('forum-$fid-$page.html', referer: '$kBaseUrl/forum-$fid-1.html');
+    final r = await client.get(
+      'forum-$fid-$page.html',
+      referer: '$kBaseUrl/forum-$fid-1.html',
+    );
     final tp = parseThreadList(r.body, page: page);
     return ThreadPage(
       items: [
@@ -61,10 +64,26 @@ class ForumApi {
     return parseThreadList(r.body, page: page);
   }
 
-  Future<List<ThreadItem>> search(String keyword, {int page = 1}) async {
+  /// 搜索。筛选参数与网页端 search.php 表单一一对应：
+  ///   搜索范围 `f`：全文 `_all` / 标题 `subject` / 用户名 `author`
+  ///   排序 `s`：相关性 `relevance` / 时间倒序 `dateline_DESC` / 时间顺序 `dateline_ASC`
+  ///   版块 `fid`：0 或空 = 所有版块，否则指定版块
+  ///   模糊搜索 `m=yes`、同义词 `syn=yes`（网页端同义词默认勾选）
+  Future<List<ThreadItem>> search(
+    String keyword, {
+    int page = 1,
+    String searchField = '_all',
+    String sortBy = 'relevance',
+    int fid = 0,
+    bool fuzzy = false,
+    bool synonym = true,
+  }) async {
     final kw = Uri.encodeQueryComponent(keyword);
     final r = await client.get(
-      'plugin.php?id=twpx_xunsearch&q=$kw&m=&syn=yes&f=_all&s=relevance&fid=0&p=$page',
+      'plugin.php?id=twpx_xunsearch&q=$kw'
+      '&m=${fuzzy ? 'yes' : ''}'
+      '&syn=${synonym ? 'yes' : ''}'
+      '&f=$searchField&s=$sortBy&fid=$fid&p=$page',
       referer: '$kBaseUrl/forum.php',
     );
     final parsed = parseXunsearchResults(r.body, page: page);
@@ -117,8 +136,9 @@ class ForumApi {
 
     // 1. 打开购买弹窗（与浏览器 showWindow 一致：infloat + handlekey + inajax），
     //    响应为 <root> 包裹的确认表单，取 formhash 与提交地址
-    final dialogUrl =
-        payUrl.contains('infloat=') ? payUrl : '$payUrl&infloat=yes&handlekey=pay&inajax=1';
+    final dialogUrl = payUrl.contains('infloat=')
+        ? payUrl
+        : '$payUrl&infloat=yes&handlekey=pay&inajax=1';
     final dialog = await client.get(dialogUrl, referer: referer);
     final body = dialog.body;
     if (looksLoggedOut(body) ||
@@ -131,10 +151,17 @@ class ForumApi {
       // 弹窗不是表单而是站点消息：已购买过 / 余额不足 / 权限不足等，透传原文
       final tip = parseAjaxMessage(body);
       if (tip.contains('购买过') || tip.contains('已经购买')) {
-        return BuyResult(success: true, alreadyOwned: true, message: _shorten(tip));
+        return BuyResult(
+          success: true,
+          alreadyOwned: true,
+          message: _shorten(tip),
+        );
       }
       if (tip.contains('余额') || tip.contains('不足') || tip.contains('权限')) {
-        return BuyResult(success: false, message: tip.isEmpty ? '余额不足或无购买权限' : _shorten(tip));
+        return BuyResult(
+          success: false,
+          message: tip.isEmpty ? '余额不足或无购买权限' : _shorten(tip),
+        );
       }
       return BuyResult(
         success: false,
@@ -161,7 +188,9 @@ class ForumApi {
       action = 'forum.php?mod=misc&action=pay&paysubmit=yes&infloat=yes';
     }
     if (!action.contains('paysubmit=')) {
-      action = action.contains('?') ? '$action&paysubmit=yes' : '$action?paysubmit=yes';
+      action = action.contains('?')
+          ? '$action&paysubmit=yes'
+          : '$action?paysubmit=yes';
     }
     if (!action.contains('tid=')) {
       action = '$action&tid=${d.tid}';
@@ -170,24 +199,23 @@ class ForumApi {
 
     // 2. 提交购买（tid 必须带：服务端 loadforum() 从 GET/POST 读 tid 加载主题）
     final submitUrl = action.startsWith('http') ? action : '$kBaseUrl/$action';
-    final r = await client.post(
-      submitUrl,
-      {
-        'formhash': fh,
-        'paysubmit': 'yes',
-        'handlekey': 'pay',
-        'tid': '${d.tid}',
-        'referer': '$kBaseUrl/thread-${d.tid}-1-1.html',
-      },
-      referer: referer,
-    );
+    final r = await client.post(submitUrl, {
+      'formhash': fh,
+      'paysubmit': 'yes',
+      'handlekey': 'pay',
+      'tid': '${d.tid}',
+      'referer': '$kBaseUrl/thread-${d.tid}-1-1.html',
+    }, referer: referer);
     final msg = parseAjaxMessage(r.body);
     final okByMsg =
         msg.contains('成功') || msg.contains('已经购买') || msg.contains('购买过');
 
     // 3. 重新拉帖验证：购买入口消失、正文回到 #postmessage 即视为已解锁
     try {
-      final check = await client.get('thread-${d.tid}-1-1.html', referer: '$kBaseUrl/forum.php');
+      final check = await client.get(
+        'thread-${d.tid}-1-1.html',
+        referer: '$kBaseUrl/forum.php',
+      );
       final re = parseThread(check.body, tid: d.tid, page: 1);
       if (!re.needsPurchase) {
         return BuyResult(
@@ -202,7 +230,10 @@ class ForumApi {
 
     // 站点已明确返回成功回调（succeedhandle_*('…', '主题购买成功', {})）
     if (okByMsg) {
-      return BuyResult(success: true, message: msg.isEmpty ? '购买成功，内容已解锁' : _shorten(msg));
+      return BuyResult(
+        success: true,
+        message: msg.isEmpty ? '购买成功，内容已解锁' : _shorten(msg),
+      );
     }
     if (msg.contains('余额') || msg.contains('不足') || msg.contains('积分')) {
       return BuyResult(success: false, message: _shorten(msg));
@@ -222,7 +253,10 @@ class ForumApi {
   }) async {
     // 回复必须带上页面里 fastpostform 的完整参数（extra / handlekey / posttime），
     // 否则 Discuz 会走到「来路不正确」或直接不认这次提交。
-    final page = await client.get('thread-$tid-1-1.html', referer: '$kBaseUrl/forum.php');
+    final page = await client.get(
+      'thread-$tid-1-1.html',
+      referer: '$kBaseUrl/forum.php',
+    );
     if (looksLoggedOut(page.body)) {
       return const ReplyResult(success: false, message: '登录状态已失效，请重新登录');
     }
@@ -232,25 +266,25 @@ class ForumApi {
       return const ReplyResult(success: false, message: '无法获取回复令牌，请刷新后重试');
     }
 
-    final baseAction = form?.action ??
+    final baseAction =
+        form?.action ??
         'forum.php?mod=post&action=reply&fid=$fid&tid=$tid'
             '&extra=page%3D1&replysubmit=yes&infloat=yes&handlekey=fastpost';
-    final url = baseAction.contains('inajax=') ? baseAction : '$baseAction&inajax=1';
+    final url = baseAction.contains('inajax=')
+        ? baseAction
+        : '$baseAction&inajax=1';
 
-    final r = await client.post(
-      url,
-      {
-        'formhash': fh,
-        'message': message,
-        'subject': '  ',
-        'usesig': '1',
-        if (form?.posttime != null) 'posttime': form!.posttime!,
-      },
-      referer: '$kBaseUrl/thread-$tid-1-1.html',
-    );
+    final r = await client.post(url, {
+      'formhash': fh,
+      'message': message,
+      'subject': '  ',
+      'usesig': '1',
+      if (form?.posttime != null) 'posttime': form!.posttime!,
+    }, referer: '$kBaseUrl/thread-$tid-1-1.html');
 
     final msg = parseAjaxMessage(r.body);
-    final ok = r.body.contains('succeedhandle_fastpost') ||
+    final ok =
+        r.body.contains('succeedhandle_fastpost') ||
         r.body.contains('succeedhandle_reply') ||
         r.body.contains('succeedhandle_post') ||
         msg.contains('回复发布成功') ||
@@ -265,7 +299,9 @@ class ForumApi {
         message: pending ? '回复已提交，等待审核通过' : '回复成功',
       );
     }
-    if (msg.contains('验证码') || msg.contains('seccode') || msg.contains('安全验证')) {
+    if (msg.contains('验证码') ||
+        msg.contains('seccode') ||
+        msg.contains('安全验证')) {
       return const ReplyResult(
         success: false,
         message: '站点要求输入验证码，请到网页端回复一次后重试',
@@ -289,7 +325,10 @@ class ForumApi {
   /// 成功响应没有 succeedhandle，只有 `errorhandle_recommend('评价指数 5 +1', …)`
   /// 与 `recommentc` 计数节点；失败则是 `alert_error` + 文案。
   Future<SiteActionResult> supportThread(String url) async {
-    final r = await client.get(_withInajax(url), referer: '$kBaseUrl/forum.php');
+    final r = await client.get(
+      _withInajax(url),
+      referer: '$kBaseUrl/forum.php',
+    );
     final body = r.body;
     if (looksLoggedOut(body)) {
       return const SiteActionResult(success: false, message: '点赞前请先登录');
@@ -318,7 +357,10 @@ class ForumApi {
   /// [url] 来自帖子页 `a[href*="ac=favorite&type=thread"]`，已带 formhash。
   /// 成功响应：`succeedhandle_('…', '信息收藏成功 ', {'id':…, 'favid':…})`。
   Future<SiteActionResult> favoriteThread(String url) async {
-    final r = await client.get(_withInajax(url), referer: '$kBaseUrl/forum.php');
+    final r = await client.get(
+      _withInajax(url),
+      referer: '$kBaseUrl/forum.php',
+    );
     final body = r.body;
     if (looksLoggedOut(body)) {
       return const SiteActionResult(success: false, message: '收藏前请先登录');
@@ -340,7 +382,8 @@ class ForumApi {
   }
 
   /// 站点弹窗接口统一带 inajax=1（等价于 showWindow 的 AJAX 请求）。
-  String _withInajax(String url) => url.contains('inajax=') ? url : '$url&inajax=1';
+  String _withInajax(String url) =>
+      url.contains('inajax=') ? url : '$url&inajax=1';
 
   // ---------------------------------------------------------------- 发帖
 
@@ -351,10 +394,7 @@ class ForumApi {
       referer: '$kBaseUrl/forum-$fid-1.html',
     );
     if (looksLoggedOut(page.body)) {
-      return const PostForm(
-        canPost: false,
-        notice: '登录状态已失效，请重新登录',
-      );
+      return const PostForm(canPost: false, notice: '登录状态已失效，请重新登录');
     }
     return parsePostForm(page.body);
   }
@@ -389,25 +429,23 @@ class ForumApi {
       return const NewThreadResult(success: false, message: '无法获取发帖令牌，请刷新后重试');
     }
 
-    final baseAction = form.action ??
+    final baseAction =
+        form.action ??
         'forum.php?mod=post&action=newthread&fid=$fid&extra=&topicsubmit=yes';
-    final url =
-        baseAction.contains('inajax=') ? baseAction : '$baseAction&inajax=1';
+    final url = baseAction.contains('inajax=')
+        ? baseAction
+        : '$baseAction&inajax=1';
 
-    final r = await client.post(
-      url,
-      {
-        'formhash': fh,
-        if (form.posttime != null) 'posttime': form.posttime!,
-        'subject': title,
-        'message': message,
-        'typeid': '${typeId ?? 0}',
-        'usesig': '1',
-        'wysiwyg': '0',
-        'save': '',
-      },
-      referer: '$kBaseUrl/forum.php?mod=post&action=newthread&fid=$fid',
-    );
+    final r = await client.post(url, {
+      'formhash': fh,
+      if (form.posttime != null) 'posttime': form.posttime!,
+      'subject': title,
+      'message': message,
+      'typeid': '${typeId ?? 0}',
+      'usesig': '1',
+      'wysiwyg': '0',
+      'save': '',
+    }, referer: '$kBaseUrl/forum.php?mod=post&action=newthread&fid=$fid');
     return parseNewThreadResult(r.body);
   }
 
@@ -441,7 +479,8 @@ class ForumApi {
       referer: '$kBaseUrl/member.php?mod=logging&action=login',
     );
     final msg = parseAjaxMessage(r.body);
-    final ok = msg.contains('欢迎您回来') ||
+    final ok =
+        msg.contains('欢迎您回来') ||
         msg.contains('现在将转入') ||
         msg.contains('登录成功') ||
         r.body.contains('succeedhandle_login');
@@ -467,11 +506,16 @@ class ForumApi {
     if (url.contains('mod=logging') || r.body.contains('请先登录')) return null;
     final header = parseHeaderUser(r.body);
     final fromUrl = RegExp(r'space-uid-(\d+)').firstMatch(url)?.group(1);
-    final uid = int.tryParse(fromUrl ?? '') ?? parseDiscuzUid(r.body) ?? header?.uid;
+    final uid =
+        int.tryParse(fromUrl ?? '') ?? parseDiscuzUid(r.body) ?? header?.uid;
     if (uid == null && header == null && !looksLoggedIn(r.body)) return null;
 
     // 先按 HTML 解析，作为兜底 + 头像 / 用户组来源
-    final html = parseProfile(r.body, fallbackUid: uid, fallbackName: header?.name);
+    final html = parseProfile(
+      r.body,
+      fallbackUid: uid,
+      fallbackName: header?.name,
+    );
 
     if (uid != null && uid > 0) {
       final api = await userStats(uid);
@@ -517,7 +561,9 @@ class ForumApi {
     if (isUserSpaceMissing(r.body)) {
       throw ForumException('该用户不存在或空间不可见');
     }
-    final html = r.statusCode == 200 ? parseProfile(r.body, fallbackUid: uid) : null;
+    final html = r.statusCode == 200
+        ? parseProfile(r.body, fallbackUid: uid)
+        : null;
     UserProfile? merged = api?.mergeMissingFrom(html) ?? html;
     if (merged == null) {
       throw ForumException('未能加载该用户资料');
@@ -623,7 +669,9 @@ class ForumApi {
       return const SiteActionResult(success: false, message: '登录状态已失效，请重新登录');
     }
     // 成功走 succeedhandle_*；失败（hash 过期 / 来路不正确 / 无权限）走 alert_error。
-    if (body.contains('succeedhandle_') || msg.contains('成功') || msg.contains('已关注')) {
+    if (body.contains('succeedhandle_') ||
+        msg.contains('成功') ||
+        msg.contains('已关注')) {
       return SiteActionResult(
         success: true,
         message: msg.isEmpty ? (follow ? '已关注' : '已取消关注') : _shorten(msg),
@@ -638,12 +686,18 @@ class ForumApi {
   // ---------------------------------------------------------------- 签到
 
   Future<SignStatus> signStatus() async {
-    final r = await client.get('k_misign-sign.html', referer: '$kBaseUrl/forum.php');
+    final r = await client.get(
+      'k_misign-sign.html',
+      referer: '$kBaseUrl/forum.php',
+    );
     return parseSignPage(r.body);
   }
 
   Future<SignResult> sign({String? formhash}) async {
-    final page = await client.get('k_misign-sign.html', referer: '$kBaseUrl/forum.php');
+    final page = await client.get(
+      'k_misign-sign.html',
+      referer: '$kBaseUrl/forum.php',
+    );
     final status = parseSignPage(page.body);
     if (status.signedToday) {
       return const SignResult(success: true, message: '今天已经签过到了');
@@ -658,19 +712,26 @@ class ForumApi {
       referer: '$kBaseUrl/k_misign-sign.html',
     );
     final msg = parseAjaxMessage(r.body);
-    final ok = msg.contains('签到成功') ||
+    final ok =
+        msg.contains('签到成功') ||
         msg.contains('今日已签') ||
         msg.contains('恭喜') ||
         msg.contains('已经签到') ||
         msg.contains('已签到') ||
         r.body.contains('qiandao_success');
     if (ok) {
-      return SignResult(success: true, message: msg.isEmpty ? '签到成功' : _shorten(msg));
+      return SignResult(
+        success: true,
+        message: msg.isEmpty ? '签到成功' : _shorten(msg),
+      );
     }
     if (msg.contains('登录') || msg.contains('游客')) {
       return const SignResult(success: false, message: '登录状态已失效，请重新登录');
     }
-    return SignResult(success: false, message: msg.isEmpty ? '签到失败，请稍后重试' : _shorten(msg));
+    return SignResult(
+      success: false,
+      message: msg.isEmpty ? '签到失败，请稍后重试' : _shorten(msg),
+    );
   }
 
   String _shorten(String s) {
@@ -685,7 +746,9 @@ class ForumApi {
     try {
       final r = await client.get('forum.php');
       final m = RegExp(r'现在时间是\s*([\d\-: ]+)').firstMatch(r.body);
-      if (m != null) return DateTime.tryParse(m.group(1)!.trim()) ?? DateTime.now();
+      if (m != null) {
+        return DateTime.tryParse(m.group(1)!.trim()) ?? DateTime.now();
+      }
     } catch (_) {}
     return DateTime.now();
   }
