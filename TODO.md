@@ -167,6 +167,25 @@
 
 - 完成 = AppState ≤300 行（达成 265）+ 编排逻辑下沉 Service + 敏感数据加密 + 测试全过 + analyze 0 issue
 
+## P13 — 用户反馈：帖子等级显示 / 关注体系 / 我的页入口（待开发）
+
+> 来源：App 用户反馈（2026-10-27）。参考链接为 sysbbs 域名（P5 双域名之一），接口均为 Discuz! X3.5 标准格式，实现时一律 `kBaseUrl` 拼相对路径，禁止硬编码域名。
+>
+> 现状核实：详情页楼主 / 回帖头像已可点进 UserSpacePage（`openUserFromAvatar`，thread_detail_page.dart:311/497）；`UserProfile.group/level` 字段已有（models.dart:195）；`userThreads()` 已拉他人主题列表（forum_api.dart:529）但只有主题一种；`ac=usergroup` / `ac=follow` / `mod=follow` 全仓零命中；formhash 获取与 `parseAjaxMessage`（succeedhandle_/errorhandle_ 透传）可直接复用。
+
+### 帖子正文优化
+
+- [ ] R1 帖子作者等级显示：解析帖子作者区块的用户组头衔（`home.php?mod=spacecp&ac=usergroup&gid=N` 链接 + 组名），`Post` / 楼主块增加 group 字段；详情页作者行显示等级徽章；备选数据源为 `userProfile(uid)` 现有 group/level 字段（多一次请求，仅楼主合适）；点击徽章是否跳用户组页实现时定
+- [ ] R2 关注 / 取关：`UserSpacePage`（他人主页）加关注按钮；`forum_api.followUser / unfollowUser` 走 `home.php?mod=spacecp&ac=follow&op=add|del&hash={formhash}&fuid={uid}`，复用 `parseAjaxMessage` 透传成功 / 失败文案（已关注、不能关注自己等）；需解析当前登录用户对该目标的关注状态（空间页 follow 链接或移动端 JSON），已关注态支持取消
+
+### 我的页面优化
+
+- [ ] R3 「我的帖子」入口 + 双 Tab 页：ProfilePage 增加磁贴入口，新页 Tab1 主题 / Tab2 回帖；主题复用 `userThreads(uid: 自己)`；回帖拉 `home.php?mod=space&do=thread&view=me&type=reply`（回帖列表 HTML 结构与主题列表不同，需新增 parser + 离线样本回归）
+- [ ] R4 「我的关注」入口 + 关注 / 粉丝页：ProfilePage 的关注 / 粉丝数字改为可点入口；新页 `home.php?mod=follow&do=following&uid=N`（关注）/ `do=follower`（粉丝）双 Tab，解析用户行（头像 / 昵称 / uid / 互动状态）
+- [ ] R5 列表头像点击进主页：关注 / 粉丝列表用户行整行（含头像）可点进 UserSpacePage；楼中楼等剩余头像位统一走 `openUserFromAvatar`
+
+- 完成 = analyze 0 issue + 全量测试全过 + 新增解析器带离线样本测试 + 真实接口实测（等级显示 / 关注取关 / 回帖列表 / 粉丝列表）
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
@@ -178,4 +197,5 @@
 - P10 完成 = 液态玻璃底栏 + 玻璃回复栏 + 点赞/收藏/分享 + analyze 0 issue + 全量测试全过
 - P11 完成 = Android 工具链升级 + workmanager 升级 + Gradle 插件补丁 + analyze 0 issue + 全量测试全过 + CI 出包
 - P12 完成 = AppState ≤300 行 + 设置模型外移打破 Service 反向依赖 + 切站编排下沉 + analyze 0 issue + 全量测试全过
+- P13 完成 = 帖子等级徽章 + 关注/取关 + 我的帖子双 Tab + 关注/粉丝页 + 头像跳转全覆盖 + analyze 0 issue + 全量测试全过
 - APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 起由 GitHub Actions 产出
