@@ -548,7 +548,7 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
   //   未关注 <a id="followmod_47753" href="home.php?mod=spacecp&ac=follow&op=add&hash=…&fuid=47753">关注</a>
   //   已关注 同一节点变成 op=del（不带 hash），点击走 JS 取关。
   // 转播链接也是 ac=follow，但 op=relay，必须排除。
-  final followAnchor = doc.querySelector('a[id^="followmod_"]');
+  final followAnchor = doc.querySelector('a[id^="followmod_"]') ?? _followHrefAnchor(doc, null);
   final followHref = followAnchor?.attributes['href'];
   final followUrl =
       followHref == null || followHref.isEmpty || followHref.contains('op=relay')
@@ -1050,15 +1050,35 @@ FollowPage parseFollowList(String html, {int page = 1}) {
 /// 自己看自己、游客、无权限时站点不渲染该节点，返回 null。
 FollowLink? parseFollowLink(String html, {int? uid}) {
   final doc = html_parser.parse(html);
-  final anchor = uid == null
-      ? doc.querySelector('a[id^="followmod_"]')
-      : doc.querySelector('a#followmod_$uid');
+  Element? anchor;
+  if (uid == null) {
+    anchor = doc.querySelector('a[id^="followmod_"]') ?? _followHrefAnchor(doc, null);
+  } else {
+    anchor = doc.querySelector('a#followmod_$uid') ?? _followHrefAnchor(doc, uid);
+  }
   final href = anchor?.attributes['href'];
   if (href == null || href.isEmpty || href.contains('op=relay')) return null;
+  final urlHash = RegExp(r'[?&]hash=([0-9a-zA-Z]+)').firstMatch(href)?.group(1);
   return FollowLink(
     following: href.contains('op=del'),
-    hash: parseFormhash(html),
+    hash: parseFormhash(html) ?? urlHash,
   );
+}
+
+/// 兜底：部分模板不带 `id="followmod_N"`，直接按 `ac=follow` + `fuid` 找入口。
+/// 排除 `op=relay`（转播）；传 [uid] 时只认该用户。
+Element? _followHrefAnchor(Document doc, int? uid) {
+  for (final a in doc.querySelectorAll('a[href*="ac=follow"]')) {
+    final href = a.attributes['href'] ?? '';
+    if (href.contains('op=relay')) continue;
+    if (!href.contains('op=add') && !href.contains('op=del')) continue;
+    if (uid != null) {
+      final m = RegExp(r'[?&]fuid=(\d+)').firstMatch(href);
+      if (m == null || int.tryParse(m.group(1)!) != uid) continue;
+    }
+    return a;
+  }
+  return null;
 }
 
 /// 向上查找最近的列表行（li / tr / dd）。package:html 没有 closest，

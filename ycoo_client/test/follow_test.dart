@@ -123,6 +123,27 @@ void main() {
       expect(link, isNull);
     });
 
+    test('没有 followmod id 时按 ac=follow&fuid 兜底', () {
+      final link = parseFollowLink(
+        '<html><body>'
+        '<input type="hidden" name="formhash" value="abcdef12" />'
+        '<a href="home.php?mod=spacecp&ac=follow&op=add&hash=abcdef12&fuid=9">关注TA</a>'
+        '</body></html>',
+        uid: 9,
+      );
+      expect(link, isNotNull);
+      expect(link!.following, isFalse);
+      expect(link.hash, 'abcdef12');
+      // uid 不匹配时不误取别人的关注入口
+      expect(
+        parseFollowLink(
+          '<html><body><a href="home.php?mod=spacecp&ac=follow&op=add&hash=abcdef12&fuid=8">关注</a></body></html>',
+          uid: 9,
+        ),
+        isNull,
+      );
+    });
+
     test('空间页按 uid 精确匹配', () {
       final link = parseFollowLink(
         '<html><body>'
@@ -156,6 +177,25 @@ void main() {
       expect(page.items.first.title, '这个版本用着很稳');
       expect(page.items.first.timeText, '2026-1-1 12:00');
       expect(page.items.first.url, contains('mod=viewthread&tid=21927'));
+    });
+  });
+
+  group('帖子接口', () {
+    test('thread() 保留等级与关注入口（1.1.4 曾在此丢字段）', () async {
+      final api = _api((req) {
+        expect(req.url.toString(), contains('thread-147227-1-1.html'));
+        return http.Response(
+          _threadHtml(),
+          200,
+          headers: {'content-type': 'text/html; charset=utf-8'},
+        );
+      });
+      final d = await api.thread(147227);
+      expect(d.posts.first.level, 'Lv.7');
+      expect(d.followUrl, contains('op=add'));
+      expect(d.followUrl, contains('fuid=47753'));
+      expect(d.followHash, 'cb349e37');
+      expect(d.following, isFalse);
     });
   });
 

@@ -97,6 +97,9 @@ class ForumApi {
       supportUrl: d.supportUrl,
       supportCount: d.supportCount,
       favoriteUrl: d.favoriteUrl,
+      followUrl: d.followUrl,
+      followHash: d.followHash,
+      following: d.following,
     );
   }
 
