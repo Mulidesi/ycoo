@@ -152,6 +152,7 @@
 - [x] 修复预存测试失败：`user_space_test` 期望基础设施层抛 `AppException`（500 → `AppException.server`），业务层仍抛 `ForumException`
 - [x] 验证：`flutter analyze` 0 issue；`flutter test` 130 全过（1 项因缺 recon 样本跳过）
 - [x] 发布 v1.1.3+24：推 tag 由 GitHub Actions 构建 per-ABI APK 并发布 Release + latest.json
+- [x] 修复发版 CI：manifest 生成把 abi/size/sha 拼成单个加引号参数，Python 只收到一个 argv 导致 `apks` 恒为空 IndexError；改为 bash 数组逐项传参 + `$GITHUB_WORKSPACE` 绝对路径定位 APK + 零匹配快速失败诊断（929b0ff），v1.1.3 tag 重指后重跑成功
 
 ### P12 待优化（后续迭代）
 
