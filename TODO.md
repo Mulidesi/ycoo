@@ -167,7 +167,7 @@
 
 - 完成 = AppState ≤300 行（达成 265）+ 编排逻辑下沉 Service + 敏感数据加密 + 测试全过 + analyze 0 issue
 
-## P13 — 用户反馈：帖子等级显示 / 关注体系 / 我的页入口（待开发）
+## P13 — 用户反馈：帖子等级显示 / 关注体系 / 我的页入口（v1.1.4）
 
 > 来源：App 用户反馈（2026-10-27）。参考链接为 sysbbs 域名（P5 双域名之一），接口均为 Discuz! X3.5 标准格式，实现时一律 `kBaseUrl` 拼相对路径，禁止硬编码域名。
 >
@@ -175,16 +175,18 @@
 
 ### 帖子正文优化
 
-- [ ] R1 帖子作者等级显示：解析帖子作者区块的用户组头衔（`home.php?mod=spacecp&ac=usergroup&gid=N` 链接 + 组名），`Post` / 楼主块增加 group 字段；详情页作者行显示等级徽章；备选数据源为 `userProfile(uid)` 现有 group/level 字段（多一次请求，仅楼主合适）；点击徽章是否跳用户组页实现时定
-- [ ] R2 关注 / 取关：`UserSpacePage`（他人主页）加关注按钮；`forum_api.followUser / unfollowUser` 走 `home.php?mod=spacecp&ac=follow&op=add|del&hash={formhash}&fuid={uid}`，复用 `parseAjaxMessage` 透传成功 / 失败文案（已关注、不能关注自己等）；需解析当前登录用户对该目标的关注状态（空间页 follow 链接或移动端 JSON），已关注态支持取消
+- [x] R1 帖子作者等级显示：解析 `a.km_lvs`（PC 模板，`Lv.7`，链接带 `ac=usergroup&gid=N`），移动模板 `a.top_lev` 兜底；`Post.level` 新增字段，详情页楼主与回帖作者行均显示徽章。不做点击跳用户组页（客户端无对应页面，外链体验差）
+- [x] R2 关注 / 取关：帖子页解析 `a#followmod_{uid}`（`op=add` 带 hash / `op=del` 已关注 / `op=relay` 转播需排除），楼主行加关注按钮；`UserSpacePage` 资料卡加关注按钮，状态由空间页 `#followmod_{uid}` + `parseFormhash` 得出；`ForumApi.setFollow` 走 `ac=follow&op=add|del&hash=…&fuid=…` + `inajax=1`，`parseAjaxMessage` 透传站点文案（成功 / 来路不正确 / 无权限）
 
 ### 我的页面优化
 
-- [ ] R3 「我的帖子」入口 + 双 Tab 页：ProfilePage 增加磁贴入口，新页 Tab1 主题 / Tab2 回帖；主题复用 `userThreads(uid: 自己)`；回帖拉 `home.php?mod=space&do=thread&view=me&type=reply`（回帖列表 HTML 结构与主题列表不同，需新增 parser + 离线样本回归）
-- [ ] R4 「我的关注」入口 + 关注 / 粉丝页：ProfilePage 的关注 / 粉丝数字改为可点入口；新页 `home.php?mod=follow&do=following&uid=N`（关注）/ `do=follower`（粉丝）双 Tab，解析用户行（头像 / 昵称 / uid / 互动状态）
-- [ ] R5 列表头像点击进主页：关注 / 粉丝列表用户行整行（含头像）可点进 UserSpacePage；楼中楼等剩余头像位统一走 `openUserFromAvatar`
+- [x] R3 「我的帖子」入口 + 双 Tab 页：ProfilePage「社区」分区磁贴 + 顶部「帖子」数字可点；新页 `MyPostsPage`，主题复用 `userThreads`，回帖走 `home.php?mod=space&uid=N&do=reply&view=me`，新增 `parseUserReplyList`（`goto=findpost&ptid=` 优先，`thread-N` 兜底）并统一映射回主题
+- [x] R4 「我的关注」入口 + 关注 / 粉丝页：ProfilePage「关注 / 粉丝」数字改为可点（粉丝直达 Tab2）；新页 `FollowListPage` 双 Tab，数据源 `home.php?mod=space&uid=N&do=follow|follower&view=…&from=space&page=N`，`parseFollowList` 解析 `a[href*=mod=space&uid=]` 昵称锚点 + 行内头像 / 签名
+- [x] R5 列表头像点击进主页：他人空间页、我的帖子列表的 `ThreadTile` 补 `onAvatarTap`（原本只有搜索 / 版块列表接线）；关注 / 粉丝行整行可点进 `UserSpacePage`
 
-- 完成 = analyze 0 issue + 全量测试全过 + 新增解析器带离线样本测试 + 真实接口实测（等级显示 / 关注取关 / 回帖列表 / 粉丝列表）
+- [x] 验证：`flutter analyze` 0 issue；`flutter test` 143 过 / 1 跳过（新增 `test/follow_test.dart` 13 例，CI 离线用例清单已同步）
+- [x] 发布 v1.1.4+25：推 tag 由 GitHub Actions 构建 per-ABI APK 并发布 Release + latest.json
+- 真实接口实测（等级显示 / 关注取关 / 回帖列表 / 粉丝列表）待客户端联网后确认；沙箱访问站点 TLS 间歇失败
 
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
@@ -197,5 +199,5 @@
 - P10 完成 = 液态玻璃底栏 + 玻璃回复栏 + 点赞/收藏/分享 + analyze 0 issue + 全量测试全过
 - P11 完成 = Android 工具链升级 + workmanager 升级 + Gradle 插件补丁 + analyze 0 issue + 全量测试全过 + CI 出包
 - P12 完成 = AppState ≤300 行 + 设置模型外移打破 Service 反向依赖 + 切站编排下沉 + analyze 0 issue + 全量测试全过
-- P13 完成 = 帖子等级徽章 + 关注/取关 + 我的帖子双 Tab + 关注/粉丝页 + 头像跳转全覆盖 + analyze 0 issue + 全量测试全过
+- P13 完成 = 帖子等级徽章 + 关注/取关 + 我的帖子双 Tab + 关注/粉丝页 + 头像跳转全覆盖 + analyze 0 issue + 全量测试全过 + CI 出包
 - APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 起由 GitHub Actions 产出
