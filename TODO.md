@@ -137,7 +137,7 @@
 - [x] 本地 `flutter build apk --release` 通过（59.1MB），推 v1.1.1 tag 后 CI 出包并发布 Release
 - 完成 = analyze 0 issue + 全量测试全过 + CI 产出 `ycoo-client-1.1.1.apk`
 
-## P12 — AppState 服务层拆分与架构重构（进行中）
+## P12 — AppState 服务层拆分与架构重构（v1.1.3）
 
 - [x] 新增 `core/storage/settings_repository.dart`：SharedPreferences 统一读写入口（Cookie / 设置 / 签到 / 回复 / 日志 / 剪贴板），AppState 不再直接操作 SharedPreferences 或 import `dart:convert`
 - [x] 新增 `core/session/session_service.dart`：登录 / 登出 / 用户信息 / Cookie 持久化 / 会话恢复
@@ -151,6 +151,7 @@
 - [x] AppState 二次瘦身（522→265 行，达成 ≤300 目标）：app_state.dart 仅剩 UI 状态 + 服务委托 + init 编排；ForumApi / PreviewStore 跟随 client 构造注入（测试可传 MockClient）
 - [x] 修复预存测试失败：`user_space_test` 期望基础设施层抛 `AppException`（500 → `AppException.server`），业务层仍抛 `ForumException`
 - [x] 验证：`flutter analyze` 0 issue；`flutter test` 130 全过（1 项因缺 recon 样本跳过）
+- [x] 发布 v1.1.3+24：推 tag 由 GitHub Actions 构建 per-ABI APK 并发布 Release + latest.json
 
 ### P12 待优化（后续迭代）
 
