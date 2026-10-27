@@ -125,26 +125,42 @@ jobs:
       - name: Generate update manifest
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
+          set -euo pipefail
           VERSION="${{ steps.apk.outputs.version }}"
-          TAG="v${VERSION}"
-          PY_ARGS="$VERSION"
-          for apk in build/app/outputs/flutter-apk/ycoo-client-${VERSION}-*.apk; do
-            [ -f "$apk" ] || continue
-            abi="${apk#*ycoo-client-${VERSION}-}"
+          APK_DIR="$GITHUB_WORKSPACE/ycoo_client/build/app/outputs/flutter-apk"
+          OUT="$GITHUB_WORKSPACE/ycoo_client/latest.json"
+          shopt -s nullglob
+          APKS=("$APK_DIR"/ycoo-client-${VERSION}-*.apk)
+          shopt -u nullglob
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::未找到 ycoo-client-${VERSION}-*.apk"
+            echo "pwd=$(pwd)"
+            echo "APK_DIR=$APK_DIR"
+            echo "VERSION=$VERSION"
+            ls -la "$APK_DIR" || true
+            exit 1
+          fi
+          # 每个 abi/size/sha 作为独立 argv 传给 Python；
+          # 此前拼成单个 "$PY_ARGS" 字符串，Python 只收到一个参数导致 apks 恒为空
+          PY_ARGS=("$VERSION" "$OUT")
+          for apk in "${APKS[@]}"; do
+            base="$(basename "$apk")"
+            abi="${base#ycoo-client-${VERSION}-}"
             abi="${abi%.apk}"
             size="$(stat -c%s "$apk")"
             sha="$(sha256sum "$apk" | awk '{print $1}')"
-            PY_ARGS="$PY_ARGS $abi $size $sha"
+            PY_ARGS+=("$abi" "$size" "$sha")
           done
-          python3 - "$PY_ARGS" <<'PY'
+          python3 - "${PY_ARGS[@]}" <<'PY'
           import json
           import sys
 
           args = sys.argv[1:]
           version = args[0]
+          out_path = args[1]
           tag = f"v{version}"
           apks = []
-          for i in range(1, len(args), 3):
+          for i in range(2, len(args), 3):
               abi, size, sha = args[i], args[i + 1], args[i + 2]
               apks.append({
                   "abi": abi,
@@ -173,10 +189,10 @@ jobs:
               "apks": apks,
               "notes": notes,
           }
-          with open("latest.json", "w", encoding="utf-8") as f:
+          with open(out_path, "w", encoding="utf-8") as f:
               json.dump(manifest, f, ensure_ascii=False, indent=2)
           PY
-          cat latest.json
+          cat "$OUT"
 
       # 仅在 tag 触发时发布，避免每次 main 提交都产生 Release
       - name: Publish to Release
