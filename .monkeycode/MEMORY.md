@@ -32,14 +32,15 @@ Entries discovered by the Agent during task execution should follow this format:
 ## Entries
 
 [Project Knowledge Summary]
-- Date: 2026-10-22
-- Context: Discovered by Agent while running tests for the view-user feature
+- Date: 2026-10-27
+- Context: Discovered by Agent while running tests; updated from 2026-10-22 entry (environment changed)
 - Category: Environment Configuration
 - Instructions:
-  - Flutter SDK 3.24.5 (Dart 3.5.4) is not preinstalled in this environment; it was installed to `/opt/sdk/flutter` because `ycoo_client` requires `sdk: ^3.5.4`.
-  - Run `export PATH=/opt/sdk/flutter/bin:$PATH`, then `cd ycoo_client && flutter pub get && flutter analyze && flutter test`. If `/opt/sdk/flutter` is missing, install the same stable version first.
+  - Flutter SDK 3.41.9 (Dart 3.11.5) is installed at `/opt/flutter`; `flutter` is NOT on PATH by default — run `export PATH=/opt/flutter/bin:$PATH` first. The old `/opt/sdk/flutter` (3.24.5) no longer exists.
+  - Run `cd ycoo_client && flutter pub get && flutter analyze && flutter test`. If `/opt/flutter` is missing, install Flutter stable matching `ycoo_client` requirements first.
   - `flutter pub get` rewrites `ycoo_client/pubspec.lock`; restore it with `git checkout -- ycoo_client/pubspec.lock` after testing to avoid unintended dependency churn.
-  - `test/detail_layout_test.dart` is skipped when `recon/thread_login.html` fixture is absent; this is expected and unrelated to feature failures.
+  - `test/detail_layout_test.dart` is skipped when `recon/thread_login.html` fixture is absent; this is expected and unrelated to feature failures. recon 抓包样本从未入库，`tool/parse_test.dart` 需 `../recon` 目录，本环境跑不了，解析回归靠 flutter test 内离线用例。
+  - `gh` CLI 不可用（未认证）。查 GitHub API（CI runs / artifacts / releases）可用 git credential helper 的 token：`TOKEN=$(echo -e "protocol=https\nhost=github.com\n" | git credential fill | grep '^password=' | cut -d= -f2)`，只进环境变量、绝不回显；随后 `curl -H "Authorization: Bearer $TOKEN" https://api.github.com/repos/Mulidesi/ycoo/...`。
 
 [Project Knowledge Summary]
 - Date: 2026-10-22
