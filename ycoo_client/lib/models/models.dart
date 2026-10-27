@@ -73,6 +73,45 @@ class ThreadPage {
   bool get hasMore => page < totalPages;
 }
 
+/// 关注 / 粉丝列表里的用户条目。
+class FollowUser {
+  final int uid;
+  final String username;
+  final String? avatar;
+
+  /// 行内附加文案（签名 / 活跃时间等），解析不到时为 null。
+  final String? note;
+
+  const FollowUser({
+    required this.uid,
+    required this.username,
+    this.avatar,
+    this.note,
+  });
+}
+
+/// 关注 / 粉丝列表分页结果。
+class FollowPage {
+  final List<FollowUser> items;
+  final int page;
+  final int totalPages;
+
+  const FollowPage({required this.items, required this.page, required this.totalPages});
+
+  bool get hasMore => page < totalPages;
+}
+
+/// 某个用户的关注状态与可用的 formhash。
+class FollowLink {
+  /// 已关注时为 true（站点入口为 `op=del`）。
+  final bool following;
+
+  /// 站点 formhash；关注（op=add）时必须携带。解析不到时为 null。
+  final String? hash;
+
+  const FollowLink({required this.following, this.hash});
+}
+
 /// 帖子附件（非图片的文件附件；图片已并入正文渲染）。
 class PostAttachment {
   final String name;
@@ -95,6 +134,11 @@ class Post {
   final String? avatar;
   final String? floor;
   final String? timeText;
+
+  /// 用户组等级徽章文案（PC 模板 `a.km_lvs`，如 `Lv.7`；
+  /// 移动模板 `a.top_lev` 会带组名，如 `Lv.7 大会员`）。无徽章时为 null。
+  final String? level;
+
   final String contentHtml;
   final bool isOp;
   final List<PostAttachment> attachments;
@@ -106,6 +150,7 @@ class Post {
     this.avatar,
     this.floor,
     this.timeText,
+    this.level,
     required this.contentHtml,
     this.isOp = false,
     this.attachments = const <PostAttachment>[],
@@ -144,6 +189,16 @@ class ThreadDetail {
   /// 收藏接口地址，含 formhash；无入口时为 null。
   final String? favoriteUrl;
 
+  /// 楼主关注入口（`home.php?mod=spacecp&ac=follow&op=add|del&…&fuid=…`）。
+  /// 游客 / 自己 / 无权限时站点不渲染该链接，此时为 null。
+  final String? followUrl;
+
+  /// 关注 / 取消关注需要的 formhash（站点 formhash，与回复共用）。
+  final String? followHash;
+
+  /// 当前登录用户是否已关注楼主（入口为 `op=del` 时 true）。
+  final bool following;
+
   const ThreadDetail({
     required this.tid,
     required this.fid,
@@ -162,6 +217,9 @@ class ThreadDetail {
     this.supportUrl,
     this.supportCount,
     this.favoriteUrl,
+    this.followUrl,
+    this.followHash,
+    this.following = false,
   });
 
   bool get hasMore => page < totalPages;

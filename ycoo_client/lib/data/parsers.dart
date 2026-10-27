@@ -432,6 +432,14 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
             : _text(p.querySelector('em[id^="authorposton"]')))
         .replaceFirst(RegExp(r'^发表于\s*'), '');
 
+    // 用户组等级徽章：
+    //   PC 模板   <a href="home.php?mod=spacecp&ac=usergroup&gid=34" class="km_lvs">Lv.7</a>
+    //   移动模板 <a class="top_lev" …>Lv.7 大会员</a>
+    // 只取徽章文本，组名后缀保留（站点这么写就照原样显示）。
+    final levelText = _text(p.querySelector('a.km_lvs')).isNotEmpty
+        ? _text(p.querySelector('a.km_lvs'))
+        : _text(p.querySelector('a.top_lev'));
+
     // 登录态下正文附件图片不在 #postmessage 里，而在其兄弟节点 div.pattl
     // （被 <ignore_js_op> 包裹，img.src 是 none.gif 占位图、真实地址在 zoomfile/file）。
     // 只并入 <img>，附件操作文本（下载附件 / 保存到相册 / 文件名大小）不进正文。
@@ -511,6 +519,7 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
           : absoluteUrl(avatarImg.attributes['src'] ?? avatarImg.attributes['data-original']),
       floor: floor.isEmpty ? null : floor,
       timeText: timeText.isEmpty ? null : timeText,
+      level: levelText.isEmpty ? null : levelText,
       contentHtml: bodyHtml,
       isOp: isOp,
       attachments: postAtts,
@@ -535,6 +544,19 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
   final favoriteUrl =
       favoriteHref == null || favoriteHref.isEmpty ? null : absoluteUrl(favoriteHref);
 
+  // 关注入口（只针对楼主）：
+  //   未关注 <a id="followmod_47753" href="home.php?mod=spacecp&ac=follow&op=add&hash=…&fuid=47753">关注</a>
+  //   已关注 同一节点变成 op=del（不带 hash），点击走 JS 取关。
+  // 转播链接也是 ac=follow，但 op=relay，必须排除。
+  final followAnchor = doc.querySelector('a[id^="followmod_"]');
+  final followHref = followAnchor?.attributes['href'];
+  final followUrl =
+      followHref == null || followHref.isEmpty || followHref.contains('op=relay')
+          ? null
+          : absoluteUrl(followHref);
+  final following = followUrl != null && followUrl.contains('op=del');
+  final followHash = followUrl == null ? null : parseFormhash(html);
+
   return ThreadDetail(
     tid: tid,
     fid: fid,
@@ -553,6 +575,9 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
     supportUrl: supportUrl,
     supportCount: supportCount,
     favoriteUrl: favoriteUrl,
+    followUrl: followUrl,
+    followHash: followHash,
+    following: following,
   );
 }
 
@@ -942,6 +967,112 @@ ThreadPage parseUserThreadList(String html, {int page = 1}) {
   var total = _parseTotalPages(doc, page);
   if (items.isEmpty) total = 1;
   return ThreadPage(items: items, page: page, totalPages: total);
+}
+
+/// 空间页「回帖」列表。
+///
+/// Discuz 的 do=reply 条目锚点是
+/// `forum.php?mod=redirect&goto=findpost&ptid=<tid>&pid=<pid>`，
+/// 文本是被截断的回帖内容；部分模板（含本站）直接给 `thread-<tid>-…` 主题链接。
+/// 两条路径都收，统一映射回主题，点进去看上下文。
+ThreadPage parseUserReplyList(String html, {int page = 1}) {
+  final doc = html_parser.parse(html);
+  final items = <ThreadItem>[];
+  final seen = <int>{};
+
+  void addFrom(String selector, RegExp tidPattern) {
+    for (final a in doc.querySelectorAll(selector)) {
+      final href = a.attributes['href'] ?? '';
+      final m = tidPattern.firstMatch(href);
+      if (m == null) continue;
+      final tid = int.tryParse(m.group(1)!) ?? 0;
+      if (tid == 0 || seen.contains(tid)) continue;
+      var title = _text(a);
+      if (title.isEmpty) title = (a.attributes['title'] ?? '').trim();
+      if (title.isEmpty || title == '查看') continue;
+      seen.add(tid);
+      final row = _upward(a, maxDepth: 4);
+      final timeText = _text(row?.querySelector('.xg1, .time, em, span.xs0'));
+      items.add(ThreadItem(
+        tid: tid,
+        title: title,
+        url: absoluteUrl('forum.php?mod=viewthread&tid=$tid'),
+        timeText: timeText.isEmpty ? null : timeText,
+      ));
+    }
+  }
+
+  addFrom('a[href*="goto=findpost"]', RegExp(r'[?&]ptid=(\d+)'));
+  if (items.isEmpty) addFrom('a[href*="thread-"]', RegExp(r'thread-(\d+)'));
+
+  var total = _parseTotalPages(doc, page);
+  if (items.isEmpty) total = 1;
+  return ThreadPage(items: items, page: page, totalPages: total);
+}
+
+/// 空间页「关注 / 粉丝」列表。
+///
+/// 条目形如 `<li class="bbda cl"><a href="home.php?mod=space&uid=123"><img …></a>
+/// <h4><a href="home.php?mod=space&uid=123">昵称</a></h4><p>签名</p></li>`。
+/// 头像链接没有文本，用「有文本 + uid 有效」筛出昵称锚点，再向上找条目容器。
+FollowPage parseFollowList(String html, {int page = 1}) {
+  final doc = html_parser.parse(html);
+  final items = <FollowUser>[];
+  final seen = <int>{};
+  // 同行里的操作链接（发短消息 / 查看资料）也带 uid，按文案排除。
+  const actionTexts = {'发短消息', '个人资料', '查看', '加为好友', '禁止', '删除'};
+  for (final a in doc.querySelectorAll('a[href*="mod=space&uid="], a[href*="space-uid-"]')) {
+    final href = a.attributes['href'] ?? '';
+    final uid = _uidFromHref(href);
+    if (uid == null || uid <= 0 || seen.contains(uid)) continue;
+    final name = _text(a);
+    if (name.isEmpty || name.length > 40 || actionTexts.contains(name)) continue;
+    seen.add(uid);
+    final row = _upward(a, maxDepth: 4);
+    final img = row?.querySelector('img[src*="avatar"], img[src*="uc_server"], img.user_avatar');
+    final note = _text(row?.querySelector('p, .note, .xg1'));
+    items.add(FollowUser(
+      uid: uid,
+      username: name,
+      avatar: img == null ? null : absoluteUrl(img.attributes['src'] ?? ''),
+      note: note.isEmpty ? null : note,
+    ));
+  }
+
+  var total = _parseTotalPages(doc, page);
+  if (items.isEmpty) total = 1;
+  return FollowPage(items: items, page: page, totalPages: total);
+}
+
+/// 解析空间页 / 帖子页里的关注入口，得到当前关注状态与 formhash。
+///
+/// 入口节点是 `a#followmod_<uid>`：`op=add`（未关注，带 hash）或 `op=del`（已关注）。
+/// 自己看自己、游客、无权限时站点不渲染该节点，返回 null。
+FollowLink? parseFollowLink(String html, {int? uid}) {
+  final doc = html_parser.parse(html);
+  final anchor = uid == null
+      ? doc.querySelector('a[id^="followmod_"]')
+      : doc.querySelector('a#followmod_$uid');
+  final href = anchor?.attributes['href'];
+  if (href == null || href.isEmpty || href.contains('op=relay')) return null;
+  return FollowLink(
+    following: href.contains('op=del'),
+    hash: parseFormhash(html),
+  );
+}
+
+/// 向上查找最近的列表行（li / tr / dd）。package:html 没有 closest，
+/// 按标签名逐层上溯并限制层数，避免误伤整页。
+Element? _upward(Element start, {int maxDepth = 5}) {
+  Element? cur = start.parent;
+  var depth = 0;
+  while (cur != null && depth < maxDepth) {
+    final tag = cur.localName;
+    if (tag == 'li' || tag == 'tr' || tag == 'dd') return cur;
+    cur = cur.parent;
+    depth++;
+  }
+  return null;
 }
 
 /// 解析 Discuz inajax XML 的提示文本。

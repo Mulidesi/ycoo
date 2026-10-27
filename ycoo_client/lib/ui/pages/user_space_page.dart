@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/discuz_client.dart';
+import '../../core/navigation/user_nav.dart';
 import '../../design/tokens.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
@@ -30,6 +31,10 @@ class _UserSpacePageState extends State<UserSpacePage> {
   bool _loadingThreads = false;
   String? _profileError;
   String? _threadError;
+
+  /// 关注状态：自己 / 游客 / 无权限时为 null（不渲染按钮）。
+  FollowLink? _follow;
+  bool _followBusy = false;
 
   @override
   void initState() {
@@ -67,7 +72,35 @@ class _UserSpacePageState extends State<UserSpacePage> {
       _page = 0;
       _totalPages = 1;
     });
-    await Future.wait([_loadProfile(), _loadThreads(1)]);
+    await Future.wait([_loadProfile(), _loadThreads(1), _loadFollow()]);
+  }
+
+  Future<void> _loadFollow() async {
+    try {
+      final link = await context.read<AppState>().api.followStatus(widget.uid);
+      if (!mounted) return;
+      setState(() => _follow = link);
+    } catch (_) {
+      // 关注状态拿不到时直接隐藏按钮，不影响资料与主题列表。
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    final link = _follow;
+    if (link == null || _followBusy) return;
+    setState(() => _followBusy = true);
+    final next = !link.following;
+    final res = await context.read<AppState>().api.setFollow(
+          uid: widget.uid,
+          follow: next,
+          hash: link.hash,
+        );
+    if (!mounted) return;
+    setState(() {
+      _followBusy = false;
+      if (res.success) _follow = FollowLink(following: next, hash: link.hash);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.message)));
   }
 
   Future<void> _loadProfile() async {
@@ -183,6 +216,11 @@ class _UserSpacePageState extends State<UserSpacePage> {
             return ThreadTile(
               item: item,
               showBoard: true,
+              onAvatarTap: () => openUserFromAvatar(
+                context,
+                uid: item.authorId,
+                username: item.author,
+              ),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => ThreadDetailPage(
@@ -281,6 +319,10 @@ class _UserSpacePageState extends State<UserSpacePage> {
                     ],
                   ),
                 ),
+                if (_follow != null) ...[
+                  const SizedBox(width: YuanSpace.sm),
+                  _followButton(),
+                ],
               ],
             ),
             const SizedBox(height: YuanSpace.md + 2),
@@ -329,6 +371,42 @@ class _UserSpacePageState extends State<UserSpacePage> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 资料卡上的关注按钮（渐变底上使用白色实心 / 描边两态）。
+  Widget _followButton() {
+    final following = _follow?.following ?? false;
+    return GestureDetector(
+      onTap: _followBusy ? null : _toggleFollow,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: following ? Colors.transparent : Colors.white,
+          borderRadius: BorderRadius.circular(YuanRadius.pill),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: following ? 0.6 : 0),
+          ),
+        ),
+        child: _followBusy
+            ? SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: following ? Colors.white : YuanColors.brandPrimaryLight,
+                ),
+              )
+            : Text(
+                following ? '已关注' : '关注',
+                style: TextStyle(
+                  color: following ? Colors.white : YuanColors.brandPrimaryLight,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
       ),
     );
   }

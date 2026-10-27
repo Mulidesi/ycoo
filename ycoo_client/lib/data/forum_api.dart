@@ -543,6 +543,95 @@ class ForumApi {
     return parseUserThreadList(r.body, page: page);
   }
 
+  /// 目标用户的回帖列表（点进去看上下文）。
+  Future<ThreadPage> userReplies({required int uid, int page = 1}) async {
+    if (uid <= 0) {
+      return const ThreadPage(items: [], page: 1, totalPages: 1);
+    }
+    final r = await client.get(
+      'home.php?mod=space&uid=$uid&do=reply&view=me&from=space&page=$page',
+      referer: '$kBaseUrl/home.php?mod=space&uid=$uid',
+    );
+    if (isUserSpaceMissing(r.body)) {
+      throw ForumException('该用户不存在或空间不可见');
+    }
+    if (isLoginRequired(r.body)) {
+      throw ForumException('登录后才能查看该用户的回帖');
+    }
+    return parseUserReplyList(r.body, page: page);
+  }
+
+  /// 关注 / 粉丝列表。[followers] 为 true 时取「关注我的」，否则取「我关注的」。
+  Future<FollowPage> followList({
+    required int uid,
+    bool followers = false,
+    int page = 1,
+  }) async {
+    if (uid <= 0) {
+      return const FollowPage(items: [], page: 1, totalPages: 1);
+    }
+    final kind = followers ? 'follower' : 'follow';
+    final r = await client.get(
+      'home.php?mod=space&uid=$uid&do=$kind&view=$kind&from=space&page=$page',
+      referer: '$kBaseUrl/home.php?mod=space&uid=$uid',
+    );
+    if (isUserSpaceMissing(r.body)) {
+      throw ForumException('该用户不存在或空间不可见');
+    }
+    if (isLoginRequired(r.body)) {
+      throw ForumException('登录后才能查看关注列表');
+    }
+    return parseFollowList(r.body, page: page);
+  }
+
+  /// 读取某用户空间页的关注状态；自己 / 游客 / 无权限时返回 null。
+  Future<FollowLink?> followStatus(int uid) async {
+    if (uid <= 0) return null;
+    final r = await client.get(
+      'home.php?mod=space&uid=$uid',
+      referer: '$kBaseUrl/home.php?mod=space&uid=$uid',
+    );
+    if (isUserSpaceMissing(r.body) || isLoginRequired(r.body)) return null;
+    return parseFollowLink(r.body, uid: uid);
+  }
+
+  /// 关注（[follow] 为 true）或取消关注。新增关注必须带 formhash。
+  Future<SiteActionResult> setFollow({
+    required int uid,
+    required bool follow,
+    String? hash,
+  }) async {
+    if (uid <= 0) {
+      return const SiteActionResult(success: false, message: '该用户不存在');
+    }
+    final op = follow ? 'add' : 'del';
+    final h = follow && hash != null && hash.isNotEmpty ? '&hash=$hash' : '';
+    final url = 'home.php?mod=spacecp&ac=follow&op=$op$h&fuid=$uid';
+    final r = await client.get(
+      _withInajax(url),
+      referer: '$kBaseUrl/home.php?mod=space&uid=$uid',
+    );
+    final body = r.body;
+    if (looksLoggedOut(body)) {
+      return const SiteActionResult(success: false, message: '关注前请先登录');
+    }
+    final msg = parseAjaxMessage(body);
+    if (msg.contains('登录') || msg.contains('游客')) {
+      return const SiteActionResult(success: false, message: '登录状态已失效，请重新登录');
+    }
+    // 成功走 succeedhandle_*；失败（hash 过期 / 来路不正确 / 无权限）走 alert_error。
+    if (body.contains('succeedhandle_') || msg.contains('成功') || msg.contains('已关注')) {
+      return SiteActionResult(
+        success: true,
+        message: msg.isEmpty ? (follow ? '已关注' : '已取消关注') : _shorten(msg),
+      );
+    }
+    return SiteActionResult(
+      success: false,
+      message: msg.isEmpty ? '操作失败，请稍后重试' : _shorten(msg),
+    );
+  }
+
   // ---------------------------------------------------------------- 签到
 
   Future<SignStatus> signStatus() async {

@@ -64,6 +64,10 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
   bool _favorited = false;
   bool _actionBusy = false;
 
+  /// 关注楼主：初始值来自详情页入口（op=del 表示已关注），操作后本地翻转。
+  bool _following = false;
+  bool _followBusy = false;
+
   /// 附件下载状态（key = attachment.url）
   final Map<String, _DlState> _dls = <String, _DlState>{};
 
@@ -102,6 +106,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
       if (!mounted) return;
       setState(() {
         _detail = d;
+        _following = d.following;
         if (page == 1 || replace) {
           _posts
             ..clear()
@@ -319,11 +324,21 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      op.author,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: YuanType.titleSm.copyWith(fontSize: 13.5),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            op.author,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: YuanType.titleSm.copyWith(fontSize: 13.5),
+                          ),
+                        ),
+                        if (op.level != null) ...[
+                          const SizedBox(width: 6),
+                          _levelBadge(op.level!),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 3),
                     Text(
@@ -335,6 +350,10 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                   ],
                 ),
               ),
+              if (d.followUrl != null && op.authorId != null) ...[
+                const SizedBox(width: 8),
+                _followChip(following: _following, onTap: _followBusy ? null : _toggleFollow),
+              ],
               if ((widget.boardName ?? '').isNotEmpty) ...[
                 const SizedBox(width: 8),
                 _outlineChip(theme, widget.boardName!),
@@ -515,6 +534,10 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                         style: YuanType.titleSm.copyWith(fontSize: 13),
                       ),
                     ),
+                    if (p.level != null) ...[
+                      const SizedBox(width: 6),
+                      _levelBadge(p.level!),
+                    ],
                     if (floor.isNotEmpty) ...[
                       const SizedBox(width: 6),
                       Text(
@@ -579,6 +602,53 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
       default:
         return '${index + 2} 楼';
     }
+  }
+
+  /// 用户组等级徽章（如 Lv.7）。
+  Widget _levelBadge(String label) {
+    final semantic = YuanSemanticColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: semantic.brandPrimary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        style: YuanType.caption.copyWith(
+          color: semantic.brandPrimary,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  /// 关注 / 已关注。已关注用弱化的描边，避免和正文抢视觉。
+  Widget _followChip({required bool following, required VoidCallback? onTap}) {
+    final semantic = YuanSemanticColors.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: following ? Colors.transparent : semantic.brandPrimary.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: following
+                ? semantic.outlineSubtle
+                : semantic.brandPrimary.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Text(
+          following ? '已关注' : '关注',
+          style: YuanType.label.copyWith(
+            color: following ? semantic.textTertiary : semantic.brandPrimary,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _outlineChip(ThemeData theme, String label) {
@@ -1034,6 +1104,27 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     setState(() {
       _actionBusy = false;
       if (res.success) _favorited = true;
+    });
+    _toast(res.message);
+  }
+
+  /// 关注 / 取消关注楼主。
+  Future<void> _toggleFollow() async {
+    final d = _detail;
+    final uid = _opPost()?.authorId;
+    if (d == null || d.followUrl == null || uid == null) return;
+    if (_followBusy) return;
+    setState(() => _followBusy = true);
+    final next = !_following;
+    final res = await context.read<AppState>().api.setFollow(
+          uid: uid,
+          follow: next,
+          hash: d.followHash,
+        );
+    if (!mounted) return;
+    setState(() {
+      _followBusy = false;
+      if (res.success) _following = next;
     });
     _toast(res.message);
   }

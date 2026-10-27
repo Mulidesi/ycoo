@@ -10,6 +10,8 @@ import '../../platform/apk_installer.dart';
 import '../../state/app_state.dart';
 import '../widgets/common.dart';
 import 'image_diag_page.dart';
+import 'follow_list_page.dart';
+import 'my_posts_page.dart';
 import 'post_filter_page.dart';
 import 'sign_page.dart';
 import 'site_settings_page.dart';
@@ -71,6 +73,41 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
         ),
         children: [
           _profileCard(theme, st, u),
+          if (u != null && u.uid > 0) ...[
+            const SizedBox(height: 14),
+            _sectionTitle(theme, '社区'),
+            SectionCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const _TileIcon(Icons.article_outlined, YuanColors.brandPrimaryLight),
+                    title: const Text('我的帖子', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    subtitle: const Text('我发表的主题与回帖', style: TextStyle(fontSize: 11.5)),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const MyPostsPage()),
+                    ),
+                  ),
+                  const Divider(indent: 56),
+                  ListTile(
+                    leading: const _TileIcon(Icons.people_alt_outlined, Color(0xFF10B981)),
+                    title: const Text('关注与粉丝', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    subtitle: Text(
+                      '关注 ${u.following ?? 0} · 粉丝 ${u.followers ?? 0}',
+                      style: const TextStyle(fontSize: 11.5),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => FollowListPage(uid: u.uid, username: u.username),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           _sectionTitle(theme, '自动功能'),
           SectionCard(
@@ -315,6 +352,7 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
       );
 
   Widget _profileCard(ThemeData theme, AppState st, UserProfile? u) {
+    final uid = u?.uid ?? 0;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -385,9 +423,41 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    _metric('帖子', u?.posts),
-                    _metric('关注', u?.following),
-                    _metric('粉丝', u?.followers),
+                    _metric(
+                      '帖子',
+                      u?.posts,
+                      onTap: uid <= 0
+                          ? null
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const MyPostsPage()),
+                              ),
+                    ),
+                    _metric(
+                      '关注',
+                      u?.following,
+                      onTap: uid <= 0
+                          ? null
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => FollowListPage(uid: uid, username: u?.username),
+                                ),
+                              ),
+                    ),
+                    _metric(
+                      '粉丝',
+                      u?.followers,
+                      onTap: uid <= 0
+                          ? null
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => FollowListPage(
+                                    uid: uid,
+                                    username: u?.username,
+                                    initialTab: 1,
+                                  ),
+                                ),
+                              ),
+                    ),
                   ],
                 ),
               ],
@@ -427,20 +497,27 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
         child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10.5)),
       );
 
-  Widget _metric(String label, int? value) {
+  Widget _metric(String label, int? value, {VoidCallback? onTap}) {
+    final content = Column(
+      children: [
+        Text(
+          value == null ? '—' : _humanCount(value),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 3),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      ],
+    );
     return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value == null ? '—' : _humanCount(value),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 3),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
-        ],
-      ),
+      child: onTap == null
+          ? content
+          : GestureDetector(
+              onTap: onTap,
+              behavior: HitTestBehavior.opaque,
+              child: content,
+            ),
     );
   }
 
