@@ -215,9 +215,10 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.1.4-arm64-v8a.apk` | 当前最新（[v1.1.4](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.4)，用户组等级徽章 + 关注/取关 + 我的帖子/关注粉丝页；versionCode 25，minSdk 24） |
-| GitHub Release | `ycoo-client-1.1.4-armeabi-v7a.apk` | 同上，32 位 ARM |
-| GitHub Release | `ycoo-client-1.1.4-x86_64.apk` | 同上，x86_64 模拟器/平板 |
+| GitHub Release | `ycoo-client-1.1.5-arm64-v8a.apk` | 当前最新（[v1.1.5](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.5)，修复帖子页关注按钮丢失；versionCode 26，minSdk 24） |
+| GitHub Release | `ycoo-client-1.1.5-armeabi-v7a.apk` | 同上，32 位 ARM |
+| GitHub Release | `ycoo-client-1.1.5-x86_64.apk` | 同上，x86_64 模拟器/平板 |
+| GitHub Release | `ycoo-client-1.1.4-arm64-v8a.apk` | v1.1.4（用户组等级徽章 + 我的帖子/关注粉丝页；versionCode 25） |
 | GitHub Release | `ycoo-client-1.1.3-arm64-v8a.apk` | v1.1.3（AppState 服务层拆分；versionCode 24） |
 | GitHub Release | `ycoo-client-1.1.2-arm64-v8a.apk` | v1.1.2（发版构建修复；versionCode 23） |
 | GitHub Release | `ycoo-client-1.1.1-arm64-v8a.apk` | v1.1.1（液态玻璃底栏/回复栏 + Android 构建链修复；versionCode 22） |

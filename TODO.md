@@ -167,7 +167,7 @@
 
 - 完成 = AppState ≤300 行（达成 265）+ 编排逻辑下沉 Service + 敏感数据加密 + 测试全过 + analyze 0 issue
 
-## P13 — 用户反馈：帖子等级显示 / 关注体系 / 我的页入口（v1.1.4）
+## P13 — 用户反馈：帖子等级显示 / 关注体系 / 我的页入口（v1.1.5）
 
 > 来源：App 用户反馈（2026-10-27）。参考链接为 sysbbs 域名（P5 双域名之一），接口均为 Discuz! X3.5 标准格式，实现时一律 `kBaseUrl` 拼相对路径，禁止硬编码域名。
 >
@@ -184,8 +184,10 @@
 - [x] R4 「我的关注」入口 + 关注 / 粉丝页：ProfilePage「关注 / 粉丝」数字改为可点（粉丝直达 Tab2）；新页 `FollowListPage` 双 Tab，数据源 `home.php?mod=space&uid=N&do=follow|follower&view=…&from=space&page=N`，`parseFollowList` 解析 `a[href*=mod=space&uid=]` 昵称锚点 + 行内头像 / 签名
 - [x] R5 列表头像点击进主页：他人空间页、我的帖子列表的 `ThreadTile` 补 `onAvatarTap`（原本只有搜索 / 版块列表接线）；关注 / 粉丝行整行可点进 `UserSpacePage`
 
-- [x] 验证：`flutter analyze` 0 issue；`flutter test` 143 过 / 1 跳过（新增 `test/follow_test.dart` 13 例，CI 离线用例清单已同步）
+- [x] 验证：`flutter analyze` 0 issue；`flutter test` 全过（新增 `test/follow_test.dart` 15 例，CI 离线用例清单已同步）
 - [x] 发布 v1.1.4+25：推 tag 由 GitHub Actions 构建 per-ABI APK 并发布 Release + latest.json
+- [x] 修复 v1.1.4 反馈「R2 未生效」：`ForumApi.thread` 重建 `ThreadDetail` 时漏拷 `followUrl/followHash/following`，解析结果被丢弃导致关注按钮不渲染；补字段并加接口级回归测试；关注入口解析增加「无 followmod id 时按 ac=follow&fuid 兜底」
+- [x] 发布 v1.1.5+26：修复关注按钮后重打包
 - 真实接口实测（等级显示 / 关注取关 / 回帖列表 / 粉丝列表）待客户端联网后确认；沙箱访问站点 TLS 间歇失败
 
 ## 完成边界
