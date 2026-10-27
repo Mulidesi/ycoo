@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:ycoo_client/core/discuz_client.dart';
+import 'package:ycoo_client/core/error/app_exception.dart';
 import 'package:ycoo_client/core/utils/link_resolver.dart';
 import 'package:ycoo_client/data/forum_api.dart';
 import 'package:ycoo_client/data/parsers.dart';
@@ -249,7 +250,7 @@ void main() {
       final api = ForumApi(DiscuzClient(
         client: MockClient((req) async => http.Response('oops', 500)),
       ));
-      expect(() => api.userProfile(10001), throwsA(isA<ForumException>()));
+      expect(() => api.userProfile(10001), throwsA(isA<AppException>()));
     });
 
     test('空间不存在', () async {

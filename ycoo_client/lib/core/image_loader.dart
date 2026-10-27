@@ -126,3 +126,11 @@ class DiscuzImageProvider extends ImageProvider<DiscuzImageProvider> {
   @override
   String toString() => 'DiscuzImageProvider("$url")';
 }
+
+/// 清空 Flutter 全局图片缓存（内存 + 磁盘）。
+void clearAllImageCache() {
+  try {
+    imageCache.clear();
+    imageCache.clearLiveImages();
+  } catch (_) {}
+}

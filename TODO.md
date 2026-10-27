@@ -137,6 +137,34 @@
 - [x] 本地 `flutter build apk --release` 通过（59.1MB），推 v1.1.1 tag 后 CI 出包并发布 Release
 - 完成 = analyze 0 issue + 全量测试全过 + CI 产出 `ycoo-client-1.1.1.apk`
 
+## P12 — AppState 服务层拆分与架构重构（进行中）
+
+- [x] 新增 `core/storage/settings_repository.dart`：SharedPreferences 统一读写入口（Cookie / 设置 / 签到 / 回复 / 日志 / 剪贴板），AppState 不再直接操作 SharedPreferences 或 import `dart:convert`
+- [x] 新增 `core/session/session_service.dart`：登录 / 登出 / 用户信息 / Cookie 持久化 / 会话恢复
+- [x] 新增 `core/services/checkin_service.dart`：签到操作 / 状态查询 / 自动签到调度 / 签到日志 / 后台签到注册与取消
+- [x] 新增 `core/services/reply_service.dart`：自动回复判定与执行 / 手动回复 / tid 去重 / 日限额 / 回复日志 / 预设队列同步
+- [x] AppState 瘦身（772→522 行）：业务方法委托给 Service，保留 UI 状态（booting / homeTabIndex / homeRefreshTick）和设置编排
+- [x] 平台判断收敛：`Platform.isAndroid` 全部收进 `background_checkin.dart`，`main.dart` / `app_state.dart` / `checkin_service.dart` 调用方零判断
+- [x] 新增 `state/settings_model.dart`：`AppSettings` + `dayKey` 从 app_state.dart 外移（514→187 行独立模型），Service 层改为导入 settings_model，打破 Service → AppState 反向依赖
+- [x] 新增 `core/services/site_manager.dart`：切站编排（更新 base URL → 清 Cookie → 清用户 → 清签到状态 → 清图片缓存 → 取消后台签到），AppState.switchSite 只留持久化 + notify
+- [x] `clearAllImageCache()` 收敛到 `core/image_loader.dart` 单一实现，AppState / SessionService 共用
+- [x] AppState 二次瘦身（522→265 行，达成 ≤300 目标）：app_state.dart 仅剩 UI 状态 + 服务委托 + init 编排；ForumApi / PreviewStore 跟随 client 构造注入（测试可传 MockClient）
+- [x] 修复预存测试失败：`user_space_test` 期望基础设施层抛 `AppException`（500 → `AppException.server`），业务层仍抛 `ForumException`
+- [x] 验证：`flutter analyze` 0 issue；`flutter test` 130 全过（1 项因缺 recon 样本跳过）
+
+### P12 待优化（后续迭代）
+
+> 核心原则检查：UI 层只渲染 + 回调，State 层只留视图状态，业务能力归 Service，数据层管持久化，基础设施管网络 / Cookie / 缓存。
+
+| 优先级 | 问题 | 当前状态 | 目标动作 |
+|--------|------|----------|----------|
+| P1 | 敏感数据明文存储 | `AppSettings.savedPassword` 经 `toJson()` → `jsonEncode` → SharedPreferences 明文（settings_model.dart 序列化时直接输出） | 引入 `flutter_secure_storage`（Android/iOS 走 EncryptedSharedPreferences/Keychain）；Web/Linux/macOS 降级为内存态不持久化密码；或改为仅存 token 不存密码 |
+| P2 | DiscuzClient 与 CookieStore 耦合 | `discuz_client.dart` 构造函数已接受 `CookieStore? store` 参数（部分可注入），内部直接操作 `store` 实例 | 如需多账户支持，抽取 `SessionManager` 管理多套 Cookie 按域名隔离；当前单站点场景优先级低 |
+| P2 | background_checkin 反向依赖 AppState | `core/automation/background_checkin.dart` 的 isolate 回调 `AppState()` 全量引导（需 repo + settings + 会话恢复），core → state 反向引用 | 抽取轻量 `CheckinBootstrap`（只建 repo/client/session/checkin 四件套），或接受现状（后台 isolate 必须完整引导，注释已说明） |
+| P2 | user_nav 反向依赖 AppState | `core/navigation/user_nav.dart` import app_state.dart 做站内路由跳转 | 路由回调改由 main.dart 注册时闭包注入，core 层持函数引用而非 AppState |
+
+- 完成 = AppState ≤300 行（达成 265）+ 编排逻辑下沉 Service + 敏感数据加密 + 测试全过 + analyze 0 issue
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
@@ -147,4 +175,5 @@
 - P9 完成 = 预设默认初始化 + 底栏不遮挡列表 + analyze 0 issue + 48 测试全过
 - P10 完成 = 液态玻璃底栏 + 玻璃回复栏 + 点赞/收藏/分享 + analyze 0 issue + 全量测试全过
 - P11 完成 = Android 工具链升级 + workmanager 升级 + Gradle 插件补丁 + analyze 0 issue + 全量测试全过 + CI 出包
+- P12 完成 = AppState ≤300 行 + 设置模型外移打破 Service 反向依赖 + 切站编排下沉 + analyze 0 issue + 全量测试全过
 - APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 起由 GitHub Actions 产出

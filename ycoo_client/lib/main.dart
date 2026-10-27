@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
@@ -21,12 +19,10 @@ Future<void> main() async {
     forum: (fid) => ThreadListPage(fid: fid, name: '版块'),
     user: (uid) => UserSpacePage(uid: uid),
   );
-  // 后台周期签到（workmanager，仅 Android）
-  if (Platform.isAndroid) {
-    try {
-      await initBackgroundCheckin();
-    } catch (_) {}
-  }
+  // 后台周期签到（内部自行判断平台，非 Android 直接跳过）
+  try {
+    await initBackgroundCheckin();
+  } catch (_) {}
   // 液态玻璃：预热 shader（首帧不闪白），并统一磨砂/厚度与降级策略。
   await LiquidGlassWidgets.initialize();
   final state = AppState();

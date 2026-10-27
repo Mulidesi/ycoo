@@ -3,7 +3,11 @@
 /// 仅 Android 生效：登录后注册 ~4 小时周期任务，回调在独立 isolate 里
 /// 重建 AppState 并执行 `autoSignIfNeeded`（内部有当日去重 / 12h 窗口），
 /// 因此重复唤醒不会重复签到。签到开关、每日上限沿用设置。
+///
+/// 所有公开函数内部自行判断平台，调用方无需额外检查。
 library;
+
+import 'dart:io' show Platform;
 
 import 'package:flutter/widgets.dart';
 import 'package:workmanager/workmanager.dart';
@@ -13,13 +17,18 @@ import '../../state/app_state.dart';
 /// 周期任务唯一名（同时用作 tag）。
 const String kBgCheckinTask = 'net.ycoo.ycoo_client.autoCheckin';
 
-/// main.dart 启动时调用一次（仅 Android）。
+/// 是否支持后台周期签到（仅 Android）。
+bool get backgroundSupported => Platform.isAndroid;
+
+/// main.dart 启动时调用一次（非 Android 直接跳过）。
 Future<void> initBackgroundCheckin() async {
+  if (!Platform.isAndroid) return;
   await Workmanager().initialize(callbackDispatcher);
 }
 
 /// 登录后注册周期任务。
 Future<void> registerBackgroundCheckin() async {
+  if (!Platform.isAndroid) return;
   await Workmanager().registerPeriodicTask(
     kBgCheckinTask,
     kBgCheckinTask,
@@ -31,6 +40,7 @@ Future<void> registerBackgroundCheckin() async {
 
 /// 登出后取消。
 Future<void> cancelBackgroundCheckin() async {
+  if (!Platform.isAndroid) return;
   await Workmanager().cancelByUniqueName(kBgCheckinTask);
 }
 
