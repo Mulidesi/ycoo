@@ -24,6 +24,8 @@ dependencies:
   crypto: ^3.0.7
   # 液态玻璃 UI（底栏 + 回帖栏）：iOS 26 Liquid Glass 风格，Impeller 走 Shader、Skia/Web 自动降级
   liquid_glass_widgets: ^1.14.1
+  # 系统分享面板（帖子长图 / 文件）
+  share_plus: ^10.1.4
 
 dev_dependencies:
   flutter_test:

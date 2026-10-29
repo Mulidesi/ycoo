@@ -229,6 +229,142 @@
 - [x] R2 骨架屏为微光扫过动画，卡片布局对齐 ThreadTile（头像/作者行/标题/摘要/首图/数据行），替换 ThreadListView 空白加载态；骨架色走语义 token（surfaceContainerHigh + surfaceDim），新增 `test/skeleton_test.dart` 2 例
 - [x] 验证：`flutter analyze` 0 issue；`flutter test` 全过（147 过 + 新增 2 例，1 项因缺 recon 样本跳过）
 
+## P15 — MT 对照优化：结构 / UX / 功能（分析完成，待实施）
+
+> 来源：对开源项目 mtforum-app（github.com/Aioprh/mtforum-app）的源码结构、样式与交互分析，
+> 结合源论坛（ycoo.net / pc.sysbbs.com 镜像）站点结构实测。
+> MT 项目路径 `/tmp/opencode/mtforum-app`（18630 行 Dart，已 clone 可复用参考）。
+>
+> 分析结论速览：
+> - **结构**：MT 是单文件大仓库（forum_repository 3392 行、thread_page 2869 行），
+>   ycoo_client 已按页面/组件分文件 + 解析器独立库，结构更清晰，无需照搬 MT 的组织方式。
+> - **UX**：MT 的楼层交互（回复/复制/举报/打赏/PM/编辑/删除/置顶）、投票卡片、
+>   楼中楼点评列表、发帖草稿、表情面板三套切换、发帖高级选项（阅读权限/价格/回复可见）
+>   等交互细节值得借鉴。
+> - **功能**：MT 覆盖投票/评分/打赏、编辑/删除帖、举报、PM 私信、好友/关注、
+>   勋章、积分商城、排行榜、通知、离线缓存、下载管理历史、WAF 本地求解等，
+>   ycoo_client 目前仅有关注/收藏/签到/自动回复/附件下载，差距集中在「帖子互动增强」
+>   与「离线/下载管理」两块。
+>
+> 实施原则：一律 `kBaseUrl` 拼相对路径，禁止硬编码域名；解析层保持纯 Dart；
+> 帖子正文与回帖必须保持视觉层级差（16/14、左轨线 3px）；颜色/间距/圆角/字号走 tokens.dart。
+
+### P15-A 帖子互动增强（投票 / 打赏 / 楼中楼 / 举报 / 编辑删除）
+
+> MT 对照：`ForumPost` 含 `comments`（楼中楼）、`rates`/`rateSummary`（打赏记录）、
+> `Poll`（投票选项+票数+多选标记）、`_ReportSheet`（5 类原因+补充说明）、
+> `_EditPostPage`（编辑+@好友+附件上传+删除确认）。
+> ycoo_client 现状：`Post` 模型仅 `pid/author/avatar/floor/timeText/level/contentHtml/isOp/attachments`，
+> 详情页只有回复/购买/收藏/支持/关注/分享/附件下载，无投票/打赏/楼中楼/举报/编辑删除。
+
+- [ ] R1 投票解析与交互：`parsers.dart` 解析 `poll` 块（选项/票数/多选/已投/过期）；
+      `Poll`/`PollOption` 模型；详情页楼主楼层下方投票卡片（勾选 + 提交投票按钮 + 票数条形图）；
+      投票提交走 `forum.php?mod=post&action=poll&tid=…&fid=…&formhash=…`（inajax）
+- [ ] R2 打赏/评分解析与交互：`parsers.dart` 解析 `_parseRates`（打赏记录 + 评分项）；
+      `RateField`/`RateOptions`/`RateRecord` 模型；详情页楼层底部打赏按钮 → `_RateSheet` 弹层
+      （勾选积分项 + 理由 + 通知作者）；楼主层「赞赏」按钮；打赏记录列表渲染
+- [ ] R3 楼中楼点评：`parsers.dart` 解析 `_parseComments`（点评 author/text/uid/time）；
+      `ForumComment` 模型；`Post` 新增 `comments` 字段；楼层卡片内嵌点评列表
+      （点击点评可发起引用回复）
+- [ ] R4 举报：楼层操作菜单新增「举报」→ `_ReportSheet` 弹层（5 类原因单选 + 补充说明）；
+      提交走 `forum.php?mod=report&action=submit&…`（inajax），复用 `parseAjaxMessage`
+- [ ] R5 编辑/删除帖：楼层操作菜单新增「编辑」「删除」（仅自己帖子 + 楼主非自己时可编辑回复）；
+      编辑走 `forum.php?mod=edit&action=edit&pid=…&tid=…&fid=…`（复用 MT `_EditPostPage` 交互范式：
+      标题/正文/@好友/附件上传/插入链接/插入媒体）；删除走 `forum.php?mod=delete&action=delete&pid=…`（确认弹窗）
+- [ ] R6 楼层操作菜单：详情页每个楼层底部加 `_floorAction`（回复/复制楼层）+ `PopupMenuButton`（更多操作：
+      举报/打赏/PM/编辑/删除）；楼主楼层额外加「赞赏」按钮
+
+### P15-B 发帖页增强（表情 / 草稿 / 附件上传 / 高级选项）
+
+> MT 对照：`ComposePage` 含标题/正文/表情面板（三套切换：默认/滑稽/Doge）/图片上传/@好友/
+> 插入链接/插入媒体/附件上传/草稿保存恢复/高级选项（阅读权限/价格/回复可见/倒序/通知/签名）。
+> ycoo_client 现状：`NewThreadPage` 仅标题/正文/版块选择/提交，无表情/草稿/附件上传/高级选项。
+
+- [ ] R1 表情面板：`lib/ui/widgets/emoji_panel.dart`（移植 MT 三套表情：默认/滑稽/Doge，
+      GridView 8 列，Set 切换）；发帖页正文输入框上方加表情按钮 → 面板展开
+- [ ] R2 草稿保存：`shared_preferences` 存标题/正文/版块 fid/时间戳；发帖页 `initState` 恢复草稿；
+      提交成功/手动清空后移除；`_draftSubject/_draftMessage/_draftFidKey/_draftAt` 键名
+- [ ] R3 图片/附件上传：发帖页加图片选择（`image_picker`）+ 文件选择（`file_picker`）；
+      上传走 `forum.php?mod=post&action=newthread&fid=…` 的 `uploadhash`/`uid` 表单
+      （复用 MT `uploadAttachment` 参数），成功后插入 `[attachimg]$aid[/attachimg]`
+- [ ] R4 高级选项：发帖页加「回复可见」「阅读权限」「价格」「倒序」「通知提醒」「使用签名」开关/输入；
+      提交时拼入 `needreply`/`readperm`/`price`/`orderdesc`/`notify`/`signature` 参数
+      （站点支持时生效，不支持时忽略）
+- [ ] R5 @好友：发帖页加 @ 按钮 → 好友列表选择（`friend.php?mod=friend` 拉取）→ 插入 `@用户名 `
+
+### P15-C 离线缓存与下载管理
+
+> MT 对照：`OfflineThreadCache`（app-private 文件 + JSON 索引 + 图片缓存 80 张/8MB 上限 +
+> 原子写入 tmp+rename + 图片 URL 映射）；`DownloadManager`（SharedPreferences 历史 +
+> 进度回调 + 中断标记 + 下载目录去重）。
+> ycoo_client 现状：仅有 `DownloadService`（附件流式下载，无历史记录/无离线缓存）。
+
+- [ ] R1 离线帖子缓存：`core/services/offline_cache.dart`（移植 MT `OfflineThreadCache` 核心逻辑：
+      app-private `offline_threads/` 目录 + `offline_threads.json` 索引 + 图片下载到本地 +
+      `imageMap` URL 映射 + 原子写入）；详情页菜单「缓存帖子供离线阅读」；
+      离线帖子列表页（「我的」页入口）
+- [ ] R2 下载管理增强：`DownloadManager` 扩展为 ChangeNotifier + SharedPreferences 历史记录
+      （`mt_forum_download_history_v1` 键）；下载记录含 url/path/name/time/status/receivedBytes/totalBytes/error；
+      「中断」状态标记（应用关闭时下载中断可重下）；「我的」页下载历史入口
+- [ ] R3 离线阅读：离线缓存帖子离线打开时走本地索引，不发起网络请求；
+      图片从本地 `file://` 加载，`NetImage` 兜底远程 URL
+
+### P15-D HTML 渲染器增强（对齐 MT post_html_view）
+
+> MT 对照：`PostHtmlView`（643 行）支持 div/p/section/article/blockquote/pre/ul/ol/table/hr/
+> h1-h6/iframe/video/img（懒加载）/a（图片链接展开）/smiley（表情图片过滤）/linkify（裸链接可点）。
+> ycoo_client 现状：`html_content.dart` 384 行，支持 text/quote/code/image/divider 块。
+
+- [ ] R1 `content.dart` 新增块类型：`table`（表格）、`pre`（代码块）、`video`/`iframe`（视频/嵌入）、
+      `h1`-`h6`（标题层级）、`section`/`article`（分区）、`hr`（分隔线）
+- [ ] R2 `html_content.dart` 渲染扩展：表格渲染为 `DataTable`（移动端横向滚动）；
+      代码块等宽字体 + 背景色；视频用 `VideoPlayer` 或外链兜底；iframe 用 `WebView` 或外链
+- [ ] R3 表情图片过滤：`_isSmiley` 逻辑（`static/image/smiley/` 路径的 img 跳过渲染，
+      避免表情图标当正文图片）
+- [ ] R4 裸链接可点：正文中的裸 URL 文本自动 `LinkifyText`（复用现有 `openInAppIfInternal` 逻辑）
+
+### P15-E UX 细节对齐
+
+> MT 对照：楼层座位标签（沙发/椅子/板凳/…/下水道）、楼主楼层卡片圆角 16 vs 回复 12、
+> 楼主卡片浅色背景 vs 回复白色、点赞/踩双按钮、评论区分隔线+「评论区 N 条回复」标题、
+> composer 栏回复目标提示条、SnackBar 文案统一。
+
+- [ ] R1 楼层座位标签：`Post.floorLabel` 计算（floor≤1 空；2-10 沙发→下水道；>10 `$floor楼`）；
+      详情页楼层右上角显示
+- [ ] R2 楼主/回复卡片差异化：楼主卡片 `surfaceContainerHigh` 底色 + 圆角 16；
+      回复卡片 `surface` + 圆角 12；楼主卡片左侧 4px primary 竖条
+- [ ] R3 评论区分隔：首条回复前加「评论区 N 条回复」标题 + 竖线分隔（对齐 MT 视觉）
+- [ ] R4 回复目标提示条：composer 栏展开时显示「回复 @作者 · 楼层」+ 取消按钮
+- [ ] R5 SnackBar 文案：统一为「操作成功 / 请先登录 / 网络错误，请重试」三类，
+      站点原文（如「主题购买成功」）透传时保留
+
+### P15-F 帖子正文分享为图片（已完成，v1.1.7）
+
+> 来源：用户反馈希望把帖子标题与正文生成分享图片，保存本地并用于站外传播。
+> 规格：`.monkeycode/specs/2026-10-29-post-share-image/`。
+> 范围：仅楼主正文；内嵌图片下载嵌入、失败占位；保存后调系统分享（`share_plus`）。
+>
+> 实现：`dart:ui` Canvas 纯命令式绘制（不依赖 widget 树），跨端可用、渲染逻辑可离线测试。
+
+- [x] R1 分享入口：详情页分享弹层新增「分享为图片」（第 4 项，位于复制链接之前）；正文为空 / 锁定无权限时禁用并提示；失败保留「复制链接」降级
+- [x] R2 内容渲染：`ShareRenderer` 绘制标题 + 楼主昵称/头像/时间 + 正文块（text/quote/code/image/divider）+ 页脚（站点名 · App 标识 / 帖子链接）
+- [x] R3 图片嵌入：`ShareImageFetcher` 并发 ≤4、单张 ≤4MB、总数 ≤20；失败灰色占位「图片加载失败」；复用现有 ContentBlock（video/iframe 由 P15-D 渲染器扩展统一承接）
+- [x] R4 尺寸与截断：宽 1080、2 倍图输出；高度自适应，超 8000px 或 100 行截断并标注「内容过长，仅展示部分内容」
+- [x] R5 保存与分享：`persistPng` 写入本机（Android 公共 Download 优先，不可写回落应用目录）+ `share_plus` 系统分享（`sharePngFile`）；取消分享不删文件
+- [x] R6 Web / 桌面降级：Web 走 `share_plus` `XFile.fromData` 下载；无分享面板时展示保存路径
+- [x] R7 测试：`share_renderer_test`（11）/`share_image_service_test`（3）/`share_sheet_test`（2）共 16 例覆盖布局/渲染/截断/占位/弹层入口；`flutter analyze` 0 issue
+
+- 新增依赖：`share_plus ^10.1.4`；Android `queries` 补 `SEND`（image/png + text/plain），`file_paths.xml` 补分享路径（cache/files/external Download）
+- 验证：`flutter analyze` 0 issue；`flutter test` 171 过 + 1 跳过（缺 recon 样本）
+
+### 完成边界
+- P15-A 完成 = 投票/打赏/楼中楼/举报/编辑删除全部落地 + analyze 0 issue + 新增测试
+- P15-B 完成 = 表情/草稿/附件上传/高级选项/@好友 + analyze 0 issue + 新增测试
+- P15-C 完成 = 离线缓存 + 下载历史 + analyze 0 issue + 新增测试
+- P15-D 完成 = HTML 渲染器扩展 + analyze 0 issue + 新增测试
+- P15-E 完成 = 楼层标签/卡片差异化/评论区分隔/回复提示条 + analyze 0 issue + 全量测试全过
+- P15-F 完成 = 分享为图片入口 + 渲染/保存/系统分享 + analyze 0 issue + 新增测试
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过

@@ -5,8 +5,12 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/discuz_client.dart';
+import '../../core/error/app_exception.dart';
 import '../../core/navigation/user_nav.dart';
 import '../../core/services/download_service.dart';
+import '../../core/share/share_image_service.dart';
+import '../../core/share/share_platform.dart';
+import '../../core/share/share_renderer.dart';
 import '../../data/content.dart';
 import '../../design/tokens.dart';
 import '../../models/models.dart';
@@ -391,7 +395,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                 theme,
                 icon: Icons.share_outlined,
                 label: '分享',
-                onTap: () => _copyText(_threadUrl(), okHint: '链接已复制'),
+                onTap: _showShareSheet,
               ),
               _actionButton(
                 context,
@@ -1129,12 +1133,23 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     _toast(res.message);
   }
 
-  /// 分享：玻璃弹层提供「复制链接 / 在浏览器打开」。
+  bool _canShareAsImage() {
+    final d = _detail;
+    final op = _opPost();
+    if (d == null || op == null) return false;
+    if ((d.needsPurchase || d.needsLogin || d.isLocked) && !_hasVisibleBody(op)) {
+      return false;
+    }
+    return canShareThreadAsImage(op.contentHtml);
+  }
+
+  /// 分享：玻璃弹层提供「分享为图片 / 复制链接 / 在浏览器打开」。
   Future<void> _showShareSheet() async {
     final url = _threadUrl();
+    final canImage = _canShareAsImage();
     await GlassModalSheet.show<void>(
       context: context,
-      halfSize: 0.32,
+      halfSize: 0.42,
       builder: (sheetCtx) => Material(
         color: Colors.transparent,
         child: Padding(
@@ -1150,6 +1165,21 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
             children: [
               const Text('分享本帖', style: YuanType.titleSm),
               const SizedBox(height: YuanSpace.md),
+              _ShareAction(
+                key: const ValueKey('share-as-image'),
+                icon: Icons.image_outlined,
+                label: '分享为图片',
+                enabled: canImage,
+                onTap: () async {
+                  Navigator.of(sheetCtx).pop();
+                  if (!canImage) {
+                    _toast('正文需登录或购买后可见');
+                    return;
+                  }
+                  await _shareAsImage();
+                },
+              ),
+              const SizedBox(height: YuanSpace.xs),
               _ShareAction(
                 icon: Icons.link_rounded,
                 label: '复制链接',
@@ -1177,23 +1207,115 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     );
   }
 
+  Future<void> _shareAsImage() async {
+    final d = _detail;
+    final op = _opPost();
+    if (d == null || op == null) return;
+    final progressNotifier = ValueNotifier<(String, double)>(('正在生成分享图片', 0.05));
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: ValueListenableBuilder<(String, double)>(
+            valueListenable: progressNotifier,
+            builder: (c, value, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value.$1, style: YuanType.bodyMd),
+                const SizedBox(height: YuanSpace.md),
+                LinearProgressIndicator(value: value.$2.clamp(0.05, 1)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    try {
+      final st = context.read<AppState>();
+      final blocks = parsePostContent(op.contentHtml, showLockedHint: false);
+      final svc = ShareImageService();
+      final threadUrl = _threadUrl();
+      final outcome = await svc.generateAndShare(
+        title: d.title,
+        author: op.author,
+        authorAvatarUrl: op.avatar,
+        timeText: op.timeText ?? '',
+        blocks: blocks,
+        siteName: st.site.name,
+        threadUrl: threadUrl,
+        onPhase: (p, v) => progressNotifier.value = (p, v),
+      );
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final shareResult = await sharePngFile(
+        path: outcome.path,
+        fileName: outcome.path.split(RegExp(r'[/\\]')).last,
+        shareText: '${d.title}\n$threadUrl',
+        bytes: outcome.bytes,
+      );
+      if (!mounted) return;
+      final hint = shareResult.hint ?? outcome.hint;
+      if ((hint ?? '').isNotEmpty) _toast(hint!);
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      final msg = e is AppException ? e.displayMessage : '生成分享图片失败';
+      await _showShareFail(msg);
+    } finally {
+      progressNotifier.dispose();
+    }
+  }
+
+  Future<void> _showShareFail(String message) async {
+    final url = _threadUrl();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('分享失败'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await _copyText(url, okHint: '链接已复制');
+            },
+            child: const Text('复制链接'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
 }
 
 /// 分享弹层中的单条操作。
 class _ShareAction extends StatelessWidget {
   const _ShareAction({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,
+    this.enabled = true,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final semantic = YuanSemanticColors.of(context);
+    final color = enabled ? semantic.textSecondary : semantic.textTertiary;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(YuanRadius.sm),
@@ -1204,9 +1326,14 @@ class _ShareAction extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: semantic.textSecondary),
+            Icon(icon, size: 20, color: color),
             const SizedBox(width: YuanSpace.sm),
-            Text(label, style: YuanType.bodyMd),
+            Text(
+              label,
+              style: YuanType.bodyMd.copyWith(
+                color: enabled ? null : semantic.textTertiary,
+              ),
+            ),
           ],
         ),
       ),

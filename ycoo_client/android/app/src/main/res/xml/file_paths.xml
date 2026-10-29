@@ -2,4 +2,8 @@
 <paths>
     <!-- 下载的更新包保存在应用缓存目录：<cacheDir>/updates/ -->
     <cache-path name="update_cache" path="updates/" />
+    <!-- 分享长图：缓存目录 / 应用文件目录 / 公共 Download -->
+    <cache-path name="share_cache" path="share/" />
+    <files-path name="share_files" path="share/" />
+    <external-path name="external_download" path="Download/" />
 </paths>
