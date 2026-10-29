@@ -377,4 +377,6 @@
 - P11 完成 = Android 工具链升级 + workmanager 升级 + Gradle 插件补丁 + analyze 0 issue + 全量测试全过 + CI 出包
 - P12 完成 = AppState ≤300 行 + 设置模型外移打破 Service 反向依赖 + 切站编排下沉 + analyze 0 issue + 全量测试全过
 - P13 完成 = 帖子等级徽章 + 关注/取关 + 我的帖子双 Tab + 关注/粉丝页 + 头像跳转全覆盖 + analyze 0 issue + 全量测试全过 + CI 出包
+- P14 完成 = 搜索筛选 + 首页骨架屏 + analyze 0 issue + 全量测试全过 + CI 出包
+- P15-F 完成 = 分享为图片入口 + 渲染/保存/系统分享 + analyze 0 issue + 新增 16 测试全过 + CI 出包
 - APK 产物：`dist/ycoo-client-1.0.9.apk`（本地）、v1.0.10 起由 GitHub Actions 产出
