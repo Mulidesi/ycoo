@@ -245,79 +245,100 @@ class ForumApi {
     );
   }
 
+  /// Discuz 的「来路不正确或表单验证串不符」文案。
+  static final RegExp _submitInvalidRe = RegExp(
+    r'(来路不正确|表单验证串不符|submit_invalid)',
+  );
+
   Future<ReplyResult> reply({
     required int tid,
     required int fid,
     required String message,
     String? formhash,
   }) async {
-    // 回复必须带上页面里 fastpostform 的完整参数（extra / handlekey / posttime），
-    // 否则 Discuz 会走到「来路不正确」或直接不认这次提交。
-    final page = await client.get(
-      'thread-$tid-1-1.html',
-      referer: '$kBaseUrl/forum.php',
-    );
-    if (looksLoggedOut(page.body)) {
-      return const ReplyResult(success: false, message: '登录状态已失效，请重新登录');
-    }
-    final form = parseReplyForm(page.body);
-    final fh = formhash ?? form?.formhash ?? parseFormhash(page.body) ?? '';
-    if (fh.isEmpty) {
-      return const ReplyResult(success: false, message: '无法获取回复令牌，请刷新后重试');
-    }
+    // 「来路不正确」通常是令牌竞态：取页面到提交之间会话/令牌失效（或
+    // 设备时钟快于站点触发 posttime 校验）。重试一次，取新页面 + 新令牌。
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final page = await client.get(
+        'thread-$tid-1-1.html',
+        referer: '$kBaseUrl/forum.php',
+      );
+      if (looksLoggedOut(page.body)) {
+        return const ReplyResult(success: false, message: '登录状态已失效，请重新登录');
+      }
+      final form = parseReplyForm(page.body);
+      final fh =
+          (attempt == 0 ? formhash : null) ??
+          form?.formhash ??
+          parseFormhash(page.body) ??
+          '';
+      if (fh.isEmpty) {
+        return const ReplyResult(success: false, message: '无法获取回复令牌，请刷新后重试');
+      }
 
-    final baseAction =
-        form?.action ??
-        'forum.php?mod=post&action=reply&fid=$fid&tid=$tid'
-            '&extra=page%3D1&replysubmit=yes&infloat=yes&handlekey=fastpost';
-    final url = baseAction.contains('inajax=')
-        ? baseAction
-        : '$baseAction&inajax=1';
+      final baseAction =
+          form?.action ??
+          'forum.php?mod=post&action=reply&fid=$fid&tid=$tid'
+              '&extra=page%3D1&replysubmit=yes&infloat=yes&handlekey=fastpost';
+      final url = baseAction.contains('inajax=')
+          ? baseAction
+          : '$baseAction&inajax=1';
 
-    // Discuz 的 formhash + posttime 双重校验：
-    //   * posttime 必须是当前时间戳（秒），否则 $_G['timestamp'] > $posttime
-    //     触发「来路不正确或表单验证串不符」；
-    //   * 回复不需要 subject，多传会让站点走到校验分支。
-    final r = await client.post(url, {
-      'formhash': fh,
-      'message': message,
-      'usesig': '1',
-      'posttime': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
-    }, referer: '$kBaseUrl/thread-$tid-1-1.html');
+      // Discuz 的 formhash + posttime 双重校验：
+      //   * posttime 必须接近站点时间戳，设备时钟快于站点会触发校验失败；
+      //   * 回复不需要 subject，多传会让站点走到校验分支。
+      final r = await client.post(url, {
+        'formhash': fh,
+        'message': message,
+        'usesig': '1',
+        'posttime': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+      }, referer: '$kBaseUrl/thread-$tid-1-1.html');
 
-    final msg = parseAjaxMessage(r.body);
-    final ok =
-        r.body.contains('succeedhandle_fastpost') ||
-        r.body.contains('succeedhandle_reply') ||
-        r.body.contains('succeedhandle_post') ||
-        msg.contains('回复发布成功') ||
-        msg.contains('感谢您的回复') ||
-        msg.contains('发布成功');
+      final msg = parseAjaxMessage(r.body);
+      final ok =
+          r.body.contains('succeedhandle_fastpost') ||
+          r.body.contains('succeedhandle_reply') ||
+          r.body.contains('succeedhandle_post') ||
+          msg.contains('回复发布成功') ||
+          msg.contains('感谢您的回复') ||
+          msg.contains('发布成功');
 
-    if (ok) {
-      // 需要审核时站点也会返回成功回调，单独提示一下
-      final pending = msg.contains('审核');
+      if (ok) {
+        // 需要审核时站点也会返回成功回调，单独提示一下
+        final pending = msg.contains('审核');
+        return ReplyResult(
+          success: true,
+          message: pending ? '回复已提交，等待审核通过' : '回复成功',
+        );
+      }
+
+      if (_submitInvalidRe.hasMatch(msg) ||
+          _submitInvalidRe.hasMatch(r.body)) {
+        // 令牌/会话竞态：换新页面 + 新令牌重试一次；再失败给明确文案。
+        if (attempt == 0) continue;
+        return const ReplyResult(
+          success: false,
+          message: '回复状态已过期，请下拉刷新页面后重试',
+        );
+      }
+      if (msg.contains('验证码') ||
+          msg.contains('seccode') ||
+          msg.contains('安全验证')) {
+        return const ReplyResult(
+          success: false,
+          message: '站点要求输入验证码，请到网页端回复一次后重试',
+          needCaptcha: true,
+        );
+      }
+      if (msg.contains('登录') || msg.contains('游客')) {
+        return const ReplyResult(success: false, message: '登录状态已失效，请重新登录');
+      }
       return ReplyResult(
-        success: true,
-        message: pending ? '回复已提交，等待审核通过' : '回复成功',
-      );
-    }
-    if (msg.contains('验证码') ||
-        msg.contains('seccode') ||
-        msg.contains('安全验证')) {
-      return const ReplyResult(
         success: false,
-        message: '站点要求输入验证码，请到网页端回复一次后重试',
-        needCaptcha: true,
+        message: msg.isEmpty ? '回复失败，站点未返回提示，请稍后重试' : msg,
       );
     }
-    if (msg.contains('登录') || msg.contains('游客')) {
-      return const ReplyResult(success: false, message: '登录状态已失效，请重新登录');
-    }
-    return ReplyResult(
-      success: false,
-      message: msg.isEmpty ? '回复失败，站点未返回提示，请稍后重试' : msg,
-    );
+    return const ReplyResult(success: false, message: '回复失败，请稍后重试');
   }
 
   // ---------------------------------------------------------------- 点赞 / 收藏

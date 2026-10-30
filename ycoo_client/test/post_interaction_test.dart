@@ -458,4 +458,60 @@ void main() {
       );
     });
   });
+
+  group('回复 submit_invalid 令牌竞态重试', () {
+    const threadPage =
+        '<html><body>'
+        '<div id="um"><a href="member.php?mod=logging&amp;action=logout">logout</a></div>'
+        '<form id="fastpostform" action="forum.php?mod=post&amp;action=reply'
+        '&amp;fid=39&amp;tid=152951&amp;replysubmit=yes&amp;infloat=yes'
+        '&amp;handlekey=fastpost">'
+        '<input type="hidden" name="formhash" value="hash_abc">'
+        '</form>'
+        '</body></html>';
+
+    test('首次提交返回来路不正确时自动重试并成功', () async {
+      var posts = 0;
+      String lastBody = '';
+      final api = _api((r) {
+        if (r.method == 'GET') {
+          return http.Response(threadPage, 200,
+              headers: {'content-type': 'text/html; charset=utf-8'});
+        }
+        posts++;
+        lastBody = r.body;
+        if (posts == 1) {
+          return _xml("showmessage('submit_invalid', '', {})");
+        }
+        return _xml("succeedhandle_fastpost('url', '回复成功', {})");
+      });
+      final res = await api.reply(tid: 152951, fid: 39, message: '内容');
+      expect(res.success, isTrue);
+      expect(posts, 2);
+      // 重试时用新页面的 formhash（不再复用传入的旧值）
+      expect(lastBody, contains('formhash'));
+    });
+
+    test('连续两次来路不正确给出明确文案', () async {
+      final api = _api((r) {
+        if (r.method == 'GET') return http.Response(threadPage, 200);
+        return _xml("showmessage('submit_invalid', '', {})");
+      });
+      final res = await api.reply(tid: 152951, fid: 39, message: '内容');
+      expect(res.success, isFalse);
+      expect(res.message, contains('刷新'));
+    });
+
+    test('成功路径不重试', () async {
+      var posts = 0;
+      final api = _api((r) {
+        if (r.method == 'GET') return http.Response(threadPage, 200);
+        posts++;
+        return _xml("succeedhandle_fastpost('url', '回复成功', {})");
+      });
+      final res = await api.reply(tid: 152951, fid: 39, message: '内容');
+      expect(res.success, isTrue);
+      expect(posts, 1);
+    });
+  });
 }
