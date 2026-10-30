@@ -215,9 +215,10 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.1.7-arm64-v8a.apk` | 当前最新（[v1.1.7](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.7)，帖子正文分享为图片；versionCode 28，minSdk 24） |
-| GitHub Release | `ycoo-client-1.1.7-armeabi-v7a.apk` | 同上，32 位 ARM |
-| GitHub Release | `ycoo-client-1.1.7-x86_64.apk` | 同上，x86_64 模拟器/平板 |
+| GitHub Release | `ycoo-client-1.1.8-arm64-v8a.apk` | 当前最新（[v1.1.8](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.8)，帖子互动增强+发帖增强+离线缓存+HTML渲染器+UX细节；versionCode 29，minSdk 24） |
+| GitHub Release | `ycoo-client-1.1.8-armeabi-v7a.apk` | 同上，32 位 ARM |
+| GitHub Release | `ycoo-client-1.1.8-x86_64.apk` | 同上，x86_64 模拟器/平板 |
+| GitHub Release | `ycoo-client-1.1.7-arm64-v8a.apk` | v1.1.7（帖子正文分享为图片；versionCode 28） |
 | GitHub Release | `ycoo-client-1.1.6-arm64-v8a.apk` | v1.1.6（搜索筛选 + 首页骨架屏；versionCode 27） |
 | GitHub Release | `ycoo-client-1.1.5-arm64-v8a.apk` | v1.1.5（修复帖子页关注按钮丢失；versionCode 26） |
 | GitHub Release | `ycoo-client-1.1.3-arm64-v8a.apk` | v1.1.3（AppState 服务层拆分；versionCode 24） |
