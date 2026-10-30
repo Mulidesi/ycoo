@@ -261,8 +261,8 @@ class ForumApi {
       return const ReplyResult(success: false, message: '登录状态已失效，请重新登录');
     }
     final form = parseReplyForm(page.body);
-    final fh = formhash ?? form?.formhash ?? parseFormhash(page.body);
-    if (fh == null) {
+    final fh = formhash ?? form?.formhash ?? parseFormhash(page.body) ?? '';
+    if (fh.isEmpty) {
       return const ReplyResult(success: false, message: '无法获取回复令牌，请刷新后重试');
     }
 
@@ -274,12 +274,15 @@ class ForumApi {
         ? baseAction
         : '$baseAction&inajax=1';
 
+    // Discuz 的 formhash + posttime 双重校验：
+    //   * posttime 必须是当前时间戳（秒），否则 $_G['timestamp'] > $posttime
+    //     触发「来路不正确或表单验证串不符」；
+    //   * 回复不需要 subject，多传会让站点走到校验分支。
     final r = await client.post(url, {
       'formhash': fh,
       'message': message,
-      'subject': '  ',
       'usesig': '1',
-      if (form?.posttime != null) 'posttime': form!.posttime!,
+      'posttime': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
     }, referer: '$kBaseUrl/thread-$tid-1-1.html');
 
     final msg = parseAjaxMessage(r.body);
@@ -385,6 +388,221 @@ class ForumApi {
   String _withInajax(String url) =>
       url.contains('inajax=') ? url : '$url&inajax=1';
 
+  // ---------------------------------------------------------------- 投票 / 打赏 / 楼中楼
+
+  /// 现拉一次帖子页取 formhash（投票 / 打赏 / 点评共用）。
+  /// 优先用传入的缓存值（如详情页 followHash），避免重复请求。
+  Future<String> fetchFormhash(int tid, {String? cached}) async {
+    if (cached != null && cached.isNotEmpty) return cached;
+    final r = await client.get(
+      'thread-$tid-1-1.html',
+      referer: '$kBaseUrl/forum.php',
+    );
+    return parseFormhash(r.body) ?? '';
+  }
+
+  /// 提交主题投票。
+  ///
+  /// Discuz `mod=misc&action=votepoll`：多选时每个选项一个 `pollanswers[$i]`。
+  /// [ids] 非空且选项均有效；[formhash] 为空时抛 [ForumException]。
+  Future<String> votePoll({
+    required int tid,
+    required int fid,
+    required String formhash,
+    required List<int> ids,
+  }) async {
+    if (ids.isEmpty) throw ForumException('请选择投票选项');
+    if (formhash.isEmpty) throw ForumException('投票凭证已失效，请下拉刷新后重试');
+    final form = <String, String>{
+      'formhash': formhash,
+      'pollsubmit': 'yes',
+      'quickforward': 'yes',
+      'handlekey': 'poll',
+    };
+    for (var i = 0; i < ids.length; i++) {
+      form['pollanswers[$i]'] = '${ids[i]}';
+    }
+    final r = await client.post(
+      'forum.php?mod=misc&action=votepoll&tid=$tid&fid=$fid&mobile=2',
+      form,
+      referer: '$kBaseUrl/thread-$tid-1-1.html',
+    );
+    final body = r.body;
+    final msg = parseAjaxMessage(body);
+    // 成功走 succeedhandle_*；已投过票 / 投票已结束 / 未选项目等走 errorhandle_*。
+    final errored =
+        body.contains('errorhandle') || (!body.contains('succeedhandle') && _looksLikeError(msg));
+    if (errored) throw ForumException(_rateErrorText(msg));
+    return msg.isEmpty ? '投票成功' : _shorten(msg);
+  }
+
+  /// 读取当前用户组可用的打赏项（好评 / 金币等）、单次范围与今日剩余额度。
+  Future<RateOptions> fetchRateOptions({required int tid, required int pid}) async {
+    try {
+      final r = await client.get(
+        'forum.php?mod=misc&action=rate&tid=$tid&pid=$pid&showratetip=1&mobile=2',
+        referer: '$kBaseUrl/thread-$tid-1-1.html',
+      );
+      if (looksLoggedOut(r.body)) {
+        return const RateOptions(notice: '打赏前请先登录');
+      }
+      final parsed = parseRateOptions(r.body);
+      if (parsed.fields.isEmpty) {
+        // 站点可能返回「24 小时额度用完 / 无权限」提示页，把提示透传出去。
+        final notice = parseAjaxMessage(r.body);
+        return RateOptions(notice: notice.isEmpty ? '' : _shorten(notice));
+      }
+      return parsed;
+    } catch (_) {
+      return RateOptions.fallback;
+    }
+  }
+
+  /// 给某个楼层打赏（Discuz `misc&action=rate`）。
+  ///
+  /// [scores] 键为 RateField.id，值为本次分值。成功返回站点提示或「打赏成功」。
+  Future<String> ratePost({
+    required int tid,
+    required int pid,
+    required String formhash,
+    required Map<int, int> scores,
+    String reason = '',
+    bool notify = false,
+  }) async {
+    if (formhash.isEmpty) throw ForumException('打赏凭证已失效，请下拉刷新后重试');
+    final r = await client.post(
+      'forum.php?mod=misc&action=rate&tid=$tid&pid=$pid&ratesubmit=yes'
+      '&handlekey=rate&formhash=$formhash&inajax=1&mobile=2',
+      {
+        'formhash': formhash,
+        'tid': '$tid',
+        'pid': '$pid',
+        'reason': reason,
+        for (final e in scores.entries) 'score${e.key}': '${e.value}',
+        if (notify) 'sendreasonpm': 'on',
+      },
+      referer: '$kBaseUrl/thread-$tid-1-1.html',
+    );
+    final msg = parseAjaxMessage(r.body);
+    if (_looksLikeError(msg)) throw ForumException(_rateErrorText(msg));
+    return msg.isEmpty ? '打赏成功' : _shorten(msg);
+  }
+
+  /// 楼中楼点评（Discuz `mod=post&action=comment`）。
+  Future<String> addComment({
+    required int tid,
+    required int pid,
+    required String message,
+    required String formhash,
+  }) async {
+    if (formhash.isEmpty) throw ForumException('点评凭证已失效，请下拉刷新后重试');
+    if (message.trim().isEmpty) throw ForumException('请输入点评内容');
+    final r = await client.post(
+      'forum.php?mod=post&action=comment&tid=$tid&pid=$pid&commentsubmit=yes&mobile=2',
+      {
+        'formhash': formhash,
+        'message': message,
+        'posttime': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+      },
+      referer: '$kBaseUrl/thread-$tid-1-1.html',
+    );
+    final msg = parseAjaxMessage(r.body);
+    if (_looksLikeError(msg)) throw ForumException(_shorten(msg));
+    return msg.isEmpty ? '点评成功' : _shorten(msg);
+  }
+
+  // ---------------------------------------------------------------- 举报 / 编辑 / 删除
+
+  /// 举报主题或回复（Discuz `mod=misc&action=report`）。
+  ///
+  /// [reason] 为原因编号 1-5，[message] 为补充说明。
+  Future<String> report({
+    required int tid,
+    required int fid,
+    required int pid,
+    required String formhash,
+    required int reason,
+    String message = '',
+  }) async {
+    if (formhash.isEmpty) throw ForumException('举报凭证已失效，请下拉刷新后重试');
+    final r = await client.post(
+      'forum.php?mod=misc&action=report&tid=$tid&fid=$fid&pid=$pid'
+      '&reportsubmit=yes&handlekey=report&mobile=2',
+      {
+        'formhash': formhash,
+        'reason': '$reason',
+        'message': message,
+      },
+      referer: '$kBaseUrl/thread-$tid-1-1.html',
+    );
+    final msg = parseAjaxMessage(r.body);
+    if (_looksLikeError(msg)) throw ForumException(_shorten(msg));
+    return msg.isEmpty ? '举报已提交' : _shorten(msg);
+  }
+
+  /// 编辑自己的帖子 / 回复（Discuz `mod=post&action=edit&editsubmit=yes`）。
+  Future<String> editPost({
+    required int tid,
+    required int fid,
+    required int pid,
+    required String subject,
+    required String message,
+    required String formhash,
+  }) async {
+    if (formhash.isEmpty) throw ForumException('编辑凭证已失效，请下拉刷新后重试');
+    final r = await client.post(
+      'forum.php?mod=post&action=edit&tid=$tid&fid=$fid&pid=$pid'
+      '&editsubmit=yes&mobile=2',
+      {
+        'formhash': formhash,
+        'subject': subject,
+        'message': message,
+        'posttime': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+        'usesig': '1',
+        'save': '',
+      },
+      referer: '$kBaseUrl/thread-$tid-1-1.html',
+    );
+    final msg = parseAjaxMessage(r.body);
+    if (_looksLikeError(msg)) throw ForumException(_shorten(msg));
+    return msg.isEmpty ? '编辑成功' : _shorten(msg);
+  }
+
+  /// 删除自己的帖子 / 回复（Discuz 用 `action=edit&delete=1`）。
+  Future<String> deletePost({
+    required int tid,
+    required int fid,
+    required int pid,
+    required String formhash,
+  }) async {
+    if (formhash.isEmpty) throw ForumException('删除凭证已失效，请下拉刷新后重试');
+    final r = await client.get(
+      'forum.php?mod=post&action=edit&tid=$tid&fid=$fid&pid=$pid'
+      '&delete=1&formhash=$formhash&mobile=2',
+      referer: '$kBaseUrl/thread-$tid-1-1.html',
+    );
+    final msg = parseAjaxMessage(r.body);
+    if (_looksLikeError(msg)) throw ForumException(_shorten(msg));
+    return msg.isEmpty ? '已删除' : _shorten(msg);
+  }
+
+  bool _looksLikeError(String text) =>
+      RegExp(r'(抱歉|错误|失败|不能|无权|权限|非法|禁止|请先登录|间隔|重复|超过限制)')
+          .hasMatch(text);
+
+  String _rateErrorText(String message) {
+    if (RegExp(r'24\s*小时评分数超过限制').hasMatch(message)) {
+      return '24 小时内该积分项的评分额度已用完，请明天再试';
+    }
+    if (message.contains('不能给自己评分') || message.contains('不能评分自己')) {
+      return '不能打赏自己的帖子';
+    }
+    if (message.contains('没有权限') || message.contains('无权')) {
+      return '当前账号没有打赏权限';
+    }
+    return message;
+  }
+
   // ---------------------------------------------------------------- 发帖
 
   /// 打开版块发帖页，取 `form#postform` 的 action、formhash、posttime 与分类。
@@ -408,6 +626,12 @@ class ForumApi {
     required String subject,
     required String message,
     int? typeId,
+    bool replyOnly = false,
+    bool orderDesc = false,
+    bool notify = false,
+    bool useSignature = true,
+    String readPerm = '',
+    String price = '',
   }) async {
     final title = subject.trim();
     if (title.isEmpty) {
@@ -442,11 +666,59 @@ class ForumApi {
       'subject': title,
       'message': message,
       'typeid': '${typeId ?? 0}',
-      'usesig': '1',
+      'usesig': useSignature ? '1' : '0',
       'wysiwyg': '0',
       'save': '',
+      if (replyOnly) 'replyonly': '1',
+      if (orderDesc) 'ordertype': '1',
+      if (notify) 'emailnotify': '1',
+      if (readPerm.isNotEmpty && readPerm != '0') 'readperm': readPerm,
+      if (price.isNotEmpty && price != '0') 'price': price,
     }, referer: '$kBaseUrl/forum.php?mod=post&action=newthread&fid=$fid');
     return parseNewThreadResult(r.body);
+  }
+
+  /// 上传附件到 Discuz。
+  ///
+  /// 走 `misc.php?mod=swfupload` 接口，返回 `DISCUZUPLOAD|aid|status|size`。
+  /// 需要发帖页表单中的 `uploadhash`（swfupload 凭证）和当前用户 `uid`。
+  Future<int> uploadAttachment({
+    required List<int> bytes,
+    required String filename,
+    required String uploadHash,
+    required int uid,
+    int? fid,
+    bool image = true,
+  }) async {
+    if (uploadHash.isEmpty) {
+      throw ForumException('上传凭证已失效，请返回发帖页重试');
+    }
+    final r = await client.postFile(
+      'misc.php?mod=swfupload&operation=upload'
+      '&type=${image ? "image" : "attach"}'
+      '&inajax=yes&infloat=yes&simple=2',
+      {
+        'uid': '$uid',
+        'hash': uploadHash,
+      },
+      fieldName: 'Filedata',
+      filename: filename,
+      bytes: bytes,
+      referer: fid != null
+          ? '$kBaseUrl/forum.php?mod=post&action=newthread&fid=$fid&mobile=2'
+          : '$kBaseUrl/forum.php?mod=post&action=newthread&mobile=2',
+    );
+    final match =
+        RegExp(r'DISCUZUPLOAD\|(\d*)\|(-?\d+)\|(\d+)').firstMatch(r.body);
+    if (match == null) {
+      throw ForumException('上传失败，请稍后重试');
+    }
+    final status = int.tryParse(match.group(2) ?? '') ?? -1;
+    final aid = int.tryParse(match.group(3) ?? '') ?? 0;
+    if (status != 0 || aid <= 0) {
+      throw ForumException('上传失败（状态码 $status），请稍后重试');
+    }
+    return aid;
   }
 
   // ---------------------------------------------------------------- 账号
@@ -751,6 +1023,13 @@ class ForumApi {
       }
     } catch (_) {}
     return DateTime.now();
+  }
+
+  Future<List<FriendItem>> fetchFriends({int page = 1}) async {
+    final r = await client.get(
+      'home.php?mod=space&do=friend&view=me&mobile=2&page=$page',
+    );
+    return parseFriends(r.body);
   }
 
   static int estimatePage(int totalPages) => math.max(1, totalPages);

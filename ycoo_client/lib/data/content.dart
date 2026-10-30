@@ -12,7 +12,22 @@ import 'package:html/parser.dart' as html_parser;
 
 import 'parsers.dart' show absoluteUrl;
 
-enum BlockKind { text, image, quote, code, divider }
+enum BlockKind {
+  text,
+  image,
+  quote,
+  code,
+  divider,
+  table,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  video,
+  iframe,
+}
 
 /// 一段带样式的行内文本。
 class InlineRun {
@@ -45,7 +60,21 @@ class ContentBlock {
   /// 代码块原文
   final String code;
 
-  const ContentBlock._(this.kind, {this.runs = const [], this.imageUrl, this.code = ''});
+  /// 表格数据
+  final List<List<InlineRun>>? tableRows;
+
+  /// 视频/iframe 链接
+  final String? videoUrl;
+  final String? iframeUrl;
+
+  const ContentBlock._(this.kind, {
+    this.runs = const [],
+    this.imageUrl,
+    this.code = '',
+    this.tableRows,
+    this.videoUrl,
+    this.iframeUrl,
+  });
 
   const ContentBlock.text(List<InlineRun> runs) : this._(BlockKind.text, runs: runs);
   const ContentBlock.quote(List<InlineRun> runs) : this._(BlockKind.quote, runs: runs);
@@ -53,12 +82,29 @@ class ContentBlock {
   ContentBlock.codeBlock(String text) : this._(BlockKind.code, code: text);
   const ContentBlock.divider() : this._(BlockKind.divider);
 
+  ContentBlock.table(List<List<InlineRun>> rows) : this._(BlockKind.table, tableRows: rows);
+
+  const ContentBlock.h1(List<InlineRun> runs) : this._(BlockKind.h1, runs: runs);
+  const ContentBlock.h2(List<InlineRun> runs) : this._(BlockKind.h2, runs: runs);
+  const ContentBlock.h3(List<InlineRun> runs) : this._(BlockKind.h3, runs: runs);
+  const ContentBlock.h4(List<InlineRun> runs) : this._(BlockKind.h4, runs: runs);
+  const ContentBlock.h5(List<InlineRun> runs) : this._(BlockKind.h5, runs: runs);
+  const ContentBlock.h6(List<InlineRun> runs) : this._(BlockKind.h6, runs: runs);
+
+  ContentBlock.video(String url) : this._(BlockKind.video, videoUrl: url);
+  ContentBlock.iframe(String url) : this._(BlockKind.iframe, iframeUrl: url);
+
   String get plainText {
     switch (kind) {
       case BlockKind.code:
         return code;
       case BlockKind.image:
         return '';
+      case BlockKind.table:
+        return tableRows?.map((r) => r.map((c) => c.text).join()).join('\n') ?? '';
+      case BlockKind.video:
+      case BlockKind.iframe:
+        return videoUrl ?? iframeUrl ?? '';
       default:
         return runs.map((r) => r.text).join();
     }
@@ -66,7 +112,7 @@ class ContentBlock {
 }
 
 // 需要整体保留空白的标签
-const _kSkipTags = {'script', 'style', 'noscript', 'template', 'iframe', 'link', 'meta'};
+const _kSkipTags = {'script', 'style', 'noscript', 'template', 'link', 'meta'};
 
 // 块级标签：前后需要断开段落
 const _kBlockTags = {
@@ -399,6 +445,51 @@ class _Builder {
         final code = node.text.replaceAll('\u00a0', ' ').trimRight();
         if (code.trim().isNotEmpty) blocks.add(ContentBlock.codeBlock(code));
         return;
+      case 'table':
+        _flush();
+        final tableRows = _collectTable(node, style);
+        if (tableRows.isNotEmpty) blocks.add(ContentBlock.table(tableRows));
+        return;
+      case 'video':
+        _flush();
+        final videoUrl = node.attributes['src'] ?? node.attributes['data-src'] ?? '';
+        if (videoUrl.isNotEmpty) blocks.add(ContentBlock.video(absoluteUrl(videoUrl)));
+        return;
+      case 'iframe':
+        _flush();
+        final iframeUrl = node.attributes['src'] ?? '';
+        if (iframeUrl.isNotEmpty) blocks.add(ContentBlock.iframe(absoluteUrl(iframeUrl)));
+        return;
+      case 'h1':
+        _flush();
+        final h1 = _collectInline(node, style.copyWith(bold: true, fontSize: 24));
+        if (h1.isNotEmpty) blocks.add(ContentBlock.h1(h1));
+        return;
+      case 'h2':
+        _flush();
+        final h2 = _collectInline(node, style.copyWith(bold: true, fontSize: 22));
+        if (h2.isNotEmpty) blocks.add(ContentBlock.h2(h2));
+        return;
+      case 'h3':
+        _flush();
+        final h3 = _collectInline(node, style.copyWith(bold: true, fontSize: 20));
+        if (h3.isNotEmpty) blocks.add(ContentBlock.h3(h3));
+        return;
+      case 'h4':
+        _flush();
+        final h4 = _collectInline(node, style.copyWith(bold: true, fontSize: 18));
+        if (h4.isNotEmpty) blocks.add(ContentBlock.h4(h4));
+        return;
+      case 'h5':
+        _flush();
+        final h5 = _collectInline(node, style.copyWith(bold: true, fontSize: 16));
+        if (h5.isNotEmpty) blocks.add(ContentBlock.h5(h5));
+        return;
+      case 'h6':
+        _flush();
+        final h6 = _collectInline(node, style.copyWith(bold: true, fontSize: 14));
+        if (h6.isNotEmpty) blocks.add(ContentBlock.h6(h6));
+        return;
       case 'a':
         final href = node.attributes['href'] ?? '';
         final usable = href.isEmpty || href.startsWith('#') || href.toLowerCase().startsWith('javascript');
@@ -486,6 +577,34 @@ class _Builder {
       out.removeLast();
     }
     return _trimRuns(out);
+  }
+
+  /// 收集表格行（用于 table 块）
+  List<List<InlineRun>> _collectTable(Element node, _Style style) {
+    final rows = <List<InlineRun>>[];
+    for (final tr in node.querySelectorAll('tr')) {
+      final cells = <InlineRun>[];
+      for (final td in tr.querySelectorAll('td, th')) {
+        final sub = _Builder(keepLocked: keepLocked);
+        sub.walkAll(td.nodes, style);
+        sub._flush();
+        final cellRuns = <InlineRun>[];
+        for (final b in sub.blocks) {
+          if (b.kind == BlockKind.text || b.kind == BlockKind.quote) {
+            cellRuns.addAll(b.runs);
+          } else if (b.kind == BlockKind.code) {
+            cellRuns.add(InlineRun(b.code));
+          }
+        }
+        if (cellRuns.isNotEmpty) {
+          cells.add(InlineRun(cellRuns.map((r) => r.text).join()));
+        } else {
+          cells.add(const InlineRun(''));
+        }
+      }
+      if (cells.isNotEmpty) rows.add(cells);
+    }
+    return rows;
   }
 }
 

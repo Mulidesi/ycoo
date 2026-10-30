@@ -26,6 +26,9 @@ class GlassReplyBar extends StatefulWidget {
     this.favorited = false,
     this.sending = false,
     this.busy = false,
+    this.replyTargetPid,
+    this.replyTargetAuthor,
+    this.onReplyTargetCleared,
   });
 
   final TextEditingController controller;
@@ -46,6 +49,11 @@ class GlassReplyBar extends StatefulWidget {
 
   /// 点赞 / 收藏 / 分享请求进行中：禁用对应按钮。
   final bool busy;
+
+  /// 回复目标楼层信息（展开态显示提示条）。
+  final int? replyTargetPid;
+  final String? replyTargetAuthor;
+  final VoidCallback? onReplyTargetCleared;
 
   @override
   State<GlassReplyBar> createState() => _GlassReplyBarState();
@@ -205,6 +213,36 @@ class _GlassReplyBarState extends State<GlassReplyBar> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (widget.replyTargetPid != null && widget.replyTargetAuthor != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: YuanSpace.xxs),
+                child: Row(
+                  children: [
+                    Icon(Icons.reply_rounded, size: 14, color: semantic.brandPrimary),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '回复 @${widget.replyTargetAuthor} · ${widget.replyTargetPid}楼',
+                        style: YuanType.caption.copyWith(color: semantic.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (widget.onReplyTargetCleared != null)
+                      InkWell(
+                        onTap: widget.onReplyTargetCleared,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          child: Text(
+                            '取消',
+                            style: YuanType.caption.copyWith(color: semantic.textTertiary),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             TextField(
               key: const ValueKey('glass-reply-input'),
               controller: widget.controller,

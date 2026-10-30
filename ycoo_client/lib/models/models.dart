@@ -143,6 +143,32 @@ class Post {
   final bool isOp;
   final List<PostAttachment> attachments;
 
+  /// 楼主主题投票（仅楼主楼可能携带；无投票时为 null）。
+  final Poll? poll;
+
+  /// 楼中楼点评列表。
+  final List<ForumComment> comments;
+
+  /// 打赏记录。
+  final List<RateRecord> rates;
+
+  /// 打赏入口标题（如「搬砖不容易，打赏一下楼主吧」）。
+  final String? rateTitle;
+
+  /// 是否可对当前楼层发起打赏（站点渲染了 `a.comiis_openrebox`）。
+  final bool canRate;
+
+  /// 楼层座位标签（floor≤1 空；2-10 沙发→下水道；>10 `$floor楼`）。
+  String get floorLabel {
+    final f = int.tryParse(floor ?? '') ?? 0;
+    if (f <= 1) return '';
+    if (f <= 10) {
+      const labels = ['沙发', '椅子', '板凳', '地板', '地下室', '下水道', '地窖', '阁楼', '天台'];
+      return labels[f - 2];
+    }
+    return '$f楼';
+  }
+
   const Post({
     required this.pid,
     required this.author,
@@ -154,7 +180,118 @@ class Post {
     required this.contentHtml,
     this.isOp = false,
     this.attachments = const <PostAttachment>[],
+    this.poll,
+    this.comments = const <ForumComment>[],
+    this.rates = const <RateRecord>[],
+    this.rateTitle,
+    this.canRate = false,
   });
+}
+
+/// 楼中楼点评（Discuz `action=comment`，挂在指定楼层下）。
+class ForumComment {
+  final String author;
+  final String text;
+  final int uid;
+  final String time;
+
+  const ForumComment({
+    required this.author,
+    required this.text,
+    this.uid = 0,
+    this.time = '',
+  });
+}
+
+/// 投票选项。
+class PollOption {
+  final int id;
+  final String text;
+  final int votes;
+
+  const PollOption({required this.id, required this.text, this.votes = 0});
+}
+
+/// 主题投票（Discuz `special=1`）。
+class Poll {
+  final List<PollOption> options;
+  final bool multiple;
+  final int total;
+  final bool voted;
+  final bool expired;
+
+  const Poll({
+    this.options = const <PollOption>[],
+    this.multiple = false,
+    this.total = 0,
+    this.voted = false,
+    this.expired = false,
+  });
+
+  int get totalVotes => total > 0 ? total : options.fold<int>(0, (s, o) => s + o.votes);
+}
+
+/// 一次打赏记录（Discuz 评分日志）。
+class RateRecord {
+  final String username;
+  final int uid;
+  final String score;
+  final String reason;
+
+  const RateRecord({
+    required this.username,
+    this.uid = 0,
+    this.score = '',
+    this.reason = '',
+  });
+}
+
+/// 站点允许的打赏项（好评 / 金币等，取决于用户组评分类别）。
+class RateField {
+  final int id;
+  final String label;
+  final int min;
+  final int max;
+
+  /// 今日剩余可评分额度（站点评分表「今日剩余」）。
+  final int left;
+
+  /// 站点下拉实际给出的可选分值（已按今日剩余裁剪）。
+  final List<int> presets;
+
+  const RateField({
+    required this.id,
+    required this.label,
+    this.min = 0,
+    this.max = 1,
+    this.left = 1,
+    this.presets = const <int>[],
+  });
+
+  /// 本次实际可选的最大分值。
+  int get ceiling => max < left ? max : left;
+}
+
+class RateOptions {
+  final List<RateField> fields;
+  final bool canNotify;
+
+  /// 站点返回的不可打赏提示（如 24 小时内额度已用完）。
+  final String notice;
+
+  const RateOptions({
+    this.fields = const <RateField>[],
+    this.canNotify = false,
+    this.notice = '',
+  });
+
+  /// 解析失败时的兜底：站点普通用户组每项每天上限均为 1。
+  static const RateOptions fallback = RateOptions(
+    fields: <RateField>[
+      RateField(id: 1, label: '好评', max: 1),
+      RateField(id: 2, label: '金币', max: 1),
+    ],
+  );
 }
 
 class ThreadDetail {
@@ -471,6 +608,8 @@ class PostForm {
   final String? posttime;
   final List<ThreadCategory> categories;
   final String? notice;
+  final String? uploadhash;
+  final int? uid;
 
   const PostForm({
     required this.canPost,
@@ -479,6 +618,8 @@ class PostForm {
     this.posttime,
     this.categories = const <ThreadCategory>[],
     this.notice,
+    this.uploadhash,
+    this.uid,
   });
 }
 
@@ -508,5 +649,19 @@ class LoginResult {
     required this.success,
     required this.message,
     this.remainingAttempts = -1,
+  });
+}
+
+class FriendItem {
+  final int uid;
+  final String username;
+  final String avatar;
+  final String note;
+
+  const FriendItem({
+    required this.uid,
+    required this.username,
+    this.avatar = '',
+    this.note = '',
   });
 }

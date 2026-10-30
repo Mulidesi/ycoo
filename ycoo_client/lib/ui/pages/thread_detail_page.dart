@@ -8,6 +8,7 @@ import '../../core/discuz_client.dart';
 import '../../core/error/app_exception.dart';
 import '../../core/navigation/user_nav.dart';
 import '../../core/services/download_service.dart';
+import '../../core/services/offline_cache.dart';
 import '../../core/share/share_image_service.dart';
 import '../../core/share/share_platform.dart';
 import '../../core/share/share_renderer.dart';
@@ -63,6 +64,10 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
   /// 回复栏展开态（键盘弹起时展开为多行输入）。
   bool _replyExpanded = false;
 
+  /// 回复目标楼层（pid + 作者名），用于展开态显示提示条。
+  int? _replyTargetPid;
+  String? _replyTargetAuthor;
+
   /// 点赞 / 收藏为会话内状态：站点没有「我的点赞」查询接口，不持久化。
   bool _liked = false;
   bool _favorited = false;
@@ -74,6 +79,11 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
 
   /// 附件下载状态（key = attachment.url）
   final Map<String, _DlState> _dls = <String, _DlState>{};
+
+  /// 投票：本次会话内的选择与提交态。刷新后由解析结果决定展示表单还是结果。
+  final Set<int> _pollSelected = <int>{};
+  bool _pollVoted = false;
+  bool _pollBusy = false;
 
   /// 当前主域名的帖子链接（分享 / 复制 / 浏览器打开 / 购买兜底）。
   String _threadUrl([int page = 1]) {
@@ -160,6 +170,29 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     }
   }
 
+  Future<void> _cacheThreadOffline() async {
+    final d = _detail;
+    if (d == null) return;
+    setState(() => _actionBusy = true);
+    try {
+      await OfflineThreadCache.instance.save(
+        tid: widget.tid,
+        title: d.title,
+        boardName: widget.boardName ?? '',
+        author: d.posts.isNotEmpty ? d.posts.first.author : '',
+        time: d.posts.isNotEmpty ? (d.posts.first.timeText ?? '') : '',
+        views: d.posts.first.poll?.totalVotes ?? 0,
+        replies: 0,
+        posts: d.posts,
+      );
+      if (mounted) _toast('帖子已缓存，可离线阅读');
+    } catch (e) {
+      if (mounted) _toast(e is AppException ? e.displayMessage : '网络错误，请重试');
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
   Future<void> _sendReply() async {
     final text = _replyCtrl.text.trim();
     final d = _detail;
@@ -170,9 +203,10 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     setState(() => _sending = false);
     if (res.success) {
       _replyCtrl.clear();
+      _clearReplyTarget();
       setState(() => _replyExpanded = false);
       FocusScope.of(context).unfocus();
-      _toast('回复成功');
+      _toast('操作成功');
       await _load(1);
     } else {
       _toast(res.message);
@@ -214,9 +248,20 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                 await launchUrl(Uri.parse(_threadUrl()), mode: LaunchMode.externalApplication);
               } else if (v == 'copy') {
                 await _copyText(_threadUrl(), okHint: '链接已复制');
+              } else if (v == 'cache') {
+                await _cacheThreadOffline();
               }
             },
             itemBuilder: (c) => const [
+              PopupMenuItem(
+                value: 'cache',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.cloud_download_rounded, size: 20),
+                  title: Text('缓存帖子供离线阅读'),
+                ),
+              ),
               PopupMenuItem(value: 'copy', child: Text('复制链接')),
               PopupMenuItem(value: 'browser', child: Text('在浏览器打开')),
             ],
@@ -300,8 +345,11 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(YuanSpace.md, YuanSpace.lg, YuanSpace.md, YuanSpace.xs),
       decoration: BoxDecoration(
-        color: semantic.surfaceThreadBody,
-        borderRadius: BorderRadius.circular(YuanRadius.md),
+        color: semantic.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: Border(
+          left: BorderSide(color: semantic.brandPrimary, width: 4),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,46 +413,56 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
             ],
           ),
           const SizedBox(height: 16),
-          // 附件被抽出正文后，contentHtml 可能只剩空白/<br>，不能再当成"正文为空"提示。
-          if (_hasVisibleBody(op))
-            PostContent(html: op.contentHtml, fontSize: YuanType.bodyLg.fontSize!, showLockedHint: false)
-          else if (op.attachments.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                '正文需登录或购买后可见，见上方提示',
-                style: theme.textTheme.bodySmall?.copyWith(color: muted),
-              ),
-            ),
-          if (op.attachments.isNotEmpty) _attachmentList(op.attachments),
-          const SizedBox(height: 6),
-          Divider(height: YuanSpace.xl, color: semantic.outlineSubtle),
-          Row(
-            children: [
-              _actionButton(
-                context,
-                theme,
-                icon: Icons.copy_rounded,
-                label: '复制正文',
-                onTap: () => _copyText(
-                  contentPlainText(parsePostContent(op.contentHtml, showLockedHint: false)).trim(),
-                ),
-              ),
-              _actionButton(
-                context,
-                theme,
-                icon: Icons.share_outlined,
-                label: '分享',
-                onTap: _showShareSheet,
-              ),
-              _actionButton(
-                context,
-                theme,
-                icon: Icons.open_in_browser_rounded,
-                label: '浏览器',
-                onTap: () => launchUrl(Uri.parse(_threadUrl()), mode: LaunchMode.externalApplication),
-              ),
-              const Spacer(),
+           // 附件被抽出正文后，contentHtml 可能只剩空白/<br>，不能再当成"正文为空"提示。
+           if (_hasVisibleBody(op))
+             PostContent(html: op.contentHtml, fontSize: YuanType.bodyLg.fontSize!, showLockedHint: false)
+           else if (op.attachments.isEmpty)
+             Padding(
+               padding: const EdgeInsets.symmetric(vertical: 12),
+               child: Text(
+                 '正文需登录或购买后可见，见上方提示',
+                 style: theme.textTheme.bodySmall?.copyWith(color: muted),
+               ),
+             ),
+           if (op.poll != null) _pollCard(op.poll!),
+           if (op.attachments.isNotEmpty) _attachmentList(op.attachments),
+           const SizedBox(height: 6),
+           Divider(height: YuanSpace.xl, color: semantic.outlineSubtle),
+           Row(
+             children: [
+               _actionButton(
+                 context,
+                 theme,
+                 icon: Icons.copy_rounded,
+                 label: '复制正文',
+                 onTap: () => _copyText(
+                   contentPlainText(parsePostContent(op.contentHtml, showLockedHint: false)).trim(),
+                 ),
+               ),
+               if (op.canRate)
+                 _actionButton(
+                   context,
+                   theme,
+                   icon: Icons.stars_outlined,
+                   label: '打赏',
+                   onTap: () => _showRateSheet(op),
+                 ),
+               _actionButton(
+                 context,
+                 theme,
+                 icon: Icons.share_outlined,
+                 label: '分享',
+                 onTap: _showShareSheet,
+               ),
+               _actionButton(
+                 context,
+                 theme,
+                 icon: Icons.open_in_browser_rounded,
+                 label: '浏览器',
+                 onTap: () => launchUrl(Uri.parse(_threadUrl()), mode: LaunchMode.externalApplication),
+               ),
+               _postMenu(op, compact: false),
+               const Spacer(),
               Flexible(
                 child: Text(
                   '${_posts.length} 楼 · ${d.totalPages} 页',
@@ -444,29 +502,354 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     );
   }
 
+  // ---------------------------------------------------------------- 投票
+
+  /// 主题投票卡片。未投且未过期时可选（单选 radio / 多选 checkbox）并提交；
+  /// 已投或过期时展示结果条形图。
+  Widget _pollCard(Poll poll) {
+    final semantic = YuanSemanticColors.of(context);
+    final showResult = poll.voted || poll.expired || _pollVoted;
+    final total = poll.totalVotes;
+    return Container(
+      margin: const EdgeInsets.only(top: YuanSpace.md),
+      padding: const EdgeInsets.all(YuanSpace.md),
+      decoration: BoxDecoration(
+        color: semantic.surfaceReply,
+        borderRadius: BorderRadius.circular(YuanRadius.sm),
+        border: Border.all(color: semantic.outlineSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.poll_outlined, size: 16, color: semantic.brandPrimary),
+              const SizedBox(width: 6),
+              const Text('投票', style: YuanType.titleSm),
+              if (poll.multiple) ...[
+                const SizedBox(width: 6),
+                Text('（多选）', style: YuanType.caption.copyWith(color: semantic.textTertiary)),
+              ],
+              const Spacer(),
+              if (total > 0)
+                Text('$total 人参与',
+                    style: YuanType.caption.copyWith(color: semantic.textTertiary)),
+            ],
+          ),
+          const SizedBox(height: YuanSpace.sm),
+          for (final opt in poll.options)
+            if (showResult)
+              _pollResultRow(opt, total, semantic)
+            else
+              _pollSelectableRow(opt, poll.multiple, semantic),
+          if (!showResult) ...[
+            const SizedBox(height: YuanSpace.sm),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _pollBusy || _pollSelected.isEmpty ? null : _submitPoll,
+                icon: const Icon(Icons.how_to_vote_outlined, size: 18),
+                label: Text(_pollBusy ? '提交中…' : '提交投票'),
+              ),
+            ),
+          ],
+          if (poll.expired && !poll.voted)
+            Padding(
+              padding: const EdgeInsets.only(top: YuanSpace.xs),
+              child: Text('投票已结束',
+                  style: YuanType.caption.copyWith(color: semantic.textTertiary)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pollSelectableRow(PollOption opt, bool multiple, YuanSemanticColors semantic) {
+    final checked = _pollSelected.contains(opt.id);
+    return InkWell(
+      onTap: () => setState(() {
+        if (multiple) {
+          if (checked) {
+            _pollSelected.remove(opt.id);
+          } else {
+            _pollSelected.add(opt.id);
+          }
+        } else {
+          _pollSelected
+            ..clear()
+            ..add(opt.id);
+        }
+      }),
+      borderRadius: BorderRadius.circular(YuanRadius.xs),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+        child: Row(
+          children: [
+            Icon(
+              multiple
+                  ? (checked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded)
+                  : (checked ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded),
+              size: 18,
+              color: checked ? semantic.brandPrimary : semantic.textTertiary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(opt.text, style: YuanType.bodyMd)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pollResultRow(PollOption opt, int total, YuanSemanticColors semantic) {
+    final ratio = total > 0 ? opt.votes / total : 0.0;
+    final pct = (ratio * 100).toStringAsFixed(1);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(opt.text, style: YuanType.bodySm)),
+              const SizedBox(width: 8),
+              Text('${opt.votes} 票 · $pct%',
+                  style: YuanType.caption.copyWith(color: semantic.textTertiary)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 6,
+              backgroundColor: semantic.outlineSubtle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitPoll() async {
+    final d = _detail;
+    final op = _opPost();
+    if (d == null || op?.poll == null || _pollSelected.isEmpty) return;
+    if (!context.read<AppState>().loggedIn) {
+      _toast('请先登录');
+      return;
+    }
+    setState(() => _pollBusy = true);
+    try {
+      final api = context.read<AppState>().api;
+      final hash = await _formhash();
+      final msg = await api.votePoll(
+        tid: d.tid,
+        fid: d.fid,
+        formhash: hash,
+        ids: _pollSelected.toList(),
+      );
+      if (!mounted) return;
+      _toast(msg);
+      _pollVoted = true;
+      await _load(1);
+    } catch (e) {
+      if (!mounted) return;
+      _toast(e is AppException ? e.displayMessage : '网络错误，请重试');
+    } finally {
+      if (mounted) setState(() => _pollBusy = false);
+    }
+  }
+
+  /// 当前帖子的 formhash：优先用关注入口里带的，否则现拉一次帖子页。
+  Future<String> _formhash() async {
+    final api = context.read<AppState>().api;
+    return api.fetchFormhash(_detail?.tid ?? widget.tid, cached: _detail?.followHash);
+  }
+
+  // ---------------------------------------------------------------- 打赏
+
+  /// 打赏弹层：读取站点可用积分项与剩余额度，选择分值并提交。
+  Future<void> _showRateSheet(Post target) async {
+    final d = _detail;
+    if (d == null) return;
+    if (!context.read<AppState>().loggedIn) {
+      _toast('请先登录');
+      return;
+    }
+    final api = context.read<AppState>().api;
+    final options = await api.fetchRateOptions(tid: d.tid, pid: target.pid);
+    if (!mounted) return;
+    if (options.fields.isEmpty) {
+      _toast(options.notice.isEmpty ? '当前无法打赏' : options.notice);
+      return;
+    }
+    final scores = <int, int>{
+      for (final f in options.fields) f.id: f.presets.isNotEmpty ? f.presets.last : f.ceiling,
+    };
+    final reasonCtrl = TextEditingController();
+    var notify = false;
+    bool submitting = false;
+
+    await GlassModalSheet.show<void>(
+      context: context,
+      halfSize: 0.5,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (c, setSheet) => Material(
+          color: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                YuanSpace.xl, YuanSpace.xs, YuanSpace.xl, YuanSpace.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(target.rateTitle ?? '打赏', style: YuanType.titleSm),
+                const SizedBox(height: YuanSpace.md),
+                for (final f in options.fields)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: YuanSpace.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${f.label}（上限 ${f.ceiling}）', style: YuanType.bodySm),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final v in (f.presets.isEmpty
+                                ? List<int>.generate(f.ceiling, (i) => i + 1)
+                                : f.presets))
+                              _rateValueChip(
+                                label: v >= 0 ? '+$v' : '$v',
+                                selected: (scores[f.id] ?? 0) == v,
+                                onTap: () => setSheet(() => scores[f.id] = v),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                TextField(
+                  controller: reasonCtrl,
+                  maxLength: 60,
+                  decoration: const InputDecoration(
+                    hintText: '打赏理由（选填）',
+                    counterText: '',
+                    isDense: true,
+                  ),
+                ),
+                if (options.canNotify)
+                  CheckboxListTile(
+                    value: notify,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('站短通知对方', style: YuanType.bodySm),
+                    onChanged: (v) => setSheet(() => notify = v ?? false),
+                  ),
+                const SizedBox(height: YuanSpace.sm),
+                FilledButton.icon(
+                  onPressed: submitting
+                      ? null
+                      : () async {
+                          setSheet(() => submitting = true);
+                          try {
+                            final hash = await _formhash();
+                            final msg = await api.ratePost(
+                              tid: d.tid,
+                              pid: target.pid,
+                              formhash: hash,
+                              scores: scores,
+                              reason: reasonCtrl.text.trim(),
+                              notify: notify,
+                            );
+                            if (!c.mounted) return;
+                            Navigator.of(c).pop();
+                            _toast(msg);
+                            await _load(1);
+                          } catch (e) {
+                            setSheet(() => submitting = false);
+                            if (c.mounted) {
+                              _toast(e is AppException ? e.displayMessage : '网络错误，请重试');
+                            }
+                          }
+                        },
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: Text(submitting ? '提交中…' : '确认打赏'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    reasonCtrl.dispose();
+  }
+
+  Widget _rateValueChip(
+      {required String label, required bool selected, required VoidCallback onTap}) {
+    final semantic = YuanSemanticColors.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? semantic.brandPrimary.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? semantic.brandPrimary : semantic.outlineSubtle,
+          ),
+        ),
+        child: Text(
+          label,
+          style: YuanType.label.copyWith(
+            color: selected ? semantic.brandPrimary : semantic.textSecondary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------- 评论
 
   Widget _commentsHeader(ThemeData theme, int count) {
     final semantic = YuanSemanticColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 22, 4, 8),
-      child: Row(
-        children: [
-          Text(
-            '全部评论',
-            style: YuanType.titleMd.copyWith(fontSize: 15.5),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 22, 4, 8),
+          child: Row(
+            children: [
+              Container(
+                width: 3,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: semantic.brandPrimary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '评论区 $count 条回复',
+                style: YuanType.titleMd.copyWith(fontSize: 15.5),
+              ),
+              const Spacer(),
+              _sortChip(theme, '正序', !_desc),
+              const SizedBox(width: 6),
+              _sortChip(theme, '倒序', _desc),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text(
-            '($count)',
-            style: YuanType.label.copyWith(color: semantic.textTertiary),
-          ),
-          const Spacer(),
-          _sortChip(theme, '正序', !_desc),
-          const SizedBox(width: 6),
-          _sortChip(theme, '倒序', _desc),
-        ],
-      ),
+        ),
+        Container(
+          margin: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+          height: 0.5,
+          color: semantic.outlineSubtle,
+        ),
+      ],
     );
   }
 
@@ -501,12 +884,10 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     final floor = _floorLabel(p, index);
     return Container(
       decoration: BoxDecoration(
-        color: semantic.surfaceReply,
+        color: semantic.surfaceBase,
+        borderRadius: BorderRadius.circular(12),
         border: Border(
           left: BorderSide(color: semantic.outlineReplyRail, width: YuanSizes.replyRailWidth),
-          bottom: index == total - 1
-              ? const BorderSide(color: Colors.transparent)
-              : BorderSide(color: semantic.outlineSubtle),
         ),
       ),
       padding: const EdgeInsets.fromLTRB(YuanSpace.sm + YuanSizes.replyRailWidth, YuanSpace.md, YuanSpace.sm, YuanSpace.sm),
@@ -572,10 +953,31 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                       style: YuanType.caption.copyWith(color: muted),
                     ),
                     const Spacer(),
+                    if (p.canRate)
+                      InkWell(
+                        onTap: () => _showRateSheet(p),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.stars_outlined, size: 15, color: muted),
+                              const SizedBox(width: 4),
+                              Text('打赏', style: YuanType.label.copyWith(color: muted)),
+                            ],
+                          ),
+                        ),
+                      ),
                     InkWell(
                       onTap: () {
-                        _replyCtrl.text = '@${p.author} ';
-                        _replyCtrl.selection = TextSelection.collapsed(offset: _replyCtrl.text.length);
+                        setState(() {
+                          _replyTargetPid = p.pid;
+                          _replyTargetAuthor = p.author;
+                          _replyCtrl.text = '@${p.author} ';
+                          _replyCtrl.selection = TextSelection.collapsed(offset: _replyCtrl.text.length);
+                          _replyExpanded = true;
+                        });
                       },
                       borderRadius: BorderRadius.circular(6),
                       child: Padding(
@@ -583,8 +985,19 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
                         child: Icon(Icons.reply_rounded, size: 15, color: muted),
                       ),
                     ),
+                    InkWell(
+                      onTap: () => _showCommentSheet(p),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Icon(Icons.chat_bubble_outline_rounded, size: 15, color: muted),
+                      ),
+                    ),
+                    _postMenu(p, compact: true),
                   ],
                 ),
+                if (p.comments.isNotEmpty) _commentList(p),
+                if (p.rates.isNotEmpty) _rateRecords(p),
               ],
             ),
           ),
@@ -593,9 +1006,503 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     );
   }
 
+  /// 打赏记录列表（`#ratelog_<pid>` 解析结果）。
+  Widget _rateRecords(Post p) {
+    final semantic = YuanSemanticColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: YuanSpace.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final r in p.rates)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                [
+                  if (r.username.isNotEmpty) r.username,
+                  if (r.score.isNotEmpty) r.score,
+                  if (r.reason.isNotEmpty) r.reason,
+                ].join(' · '),
+                style: YuanType.caption.copyWith(color: semantic.textTertiary),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 楼中楼点评列表（Discuz `.cm` 容器，纯展示；点评入口在操作行）。
+  Widget _commentList(Post p) {
+    final semantic = YuanSemanticColors.of(context);
+    return Container(
+      margin: const EdgeInsets.only(top: YuanSpace.sm),
+      padding: const EdgeInsets.all(YuanSpace.sm),
+      decoration: BoxDecoration(
+        color: semantic.surfaceReply.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(YuanRadius.xs),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final c in p.comments) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (c.author.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Text('${c.author}：',
+                        style: YuanType.label.copyWith(color: semantic.textSecondary)),
+                  ),
+                Expanded(
+                  child: Text(
+                    c.text,
+                    style: YuanType.bodySm.copyWith(color: semantic.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+            if (c.time.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(c.time,
+                    style: YuanType.caption.copyWith(color: semantic.textTertiary)),
+              ),
+            if (c != p.comments.last)
+              Divider(height: YuanSpace.md, color: semantic.outlineSubtle),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 楼中楼点评弹层：输入文本并提交到 `mod=post&action=comment`。
+  Future<void> _showCommentSheet(Post target) async {
+    final d = _detail;
+    if (d == null) return;
+    if (!context.read<AppState>().loggedIn) {
+      _toast('请先登录');
+      return;
+    }
+    final ctrl = TextEditingController();
+    var submitting = false;
+    await GlassModalSheet.show<void>(
+      context: context,
+      halfSize: 0.35,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (c, setSheet) => Material(
+          color: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                YuanSpace.xl, YuanSpace.xs, YuanSpace.xl, YuanSpace.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('点评 @${target.author}', style: YuanType.titleSm),
+                const SizedBox(height: YuanSpace.md),
+                TextField(
+                  controller: ctrl,
+                  maxLines: 3,
+                  minLines: 1,
+                  maxLength: 500,
+                  decoration: const InputDecoration(
+                    hintText: '写下你的点评…',
+                    counterText: '',
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: YuanSpace.sm),
+                FilledButton.icon(
+                  onPressed: submitting
+                      ? null
+                      : () async {
+                          final text = ctrl.text.trim();
+                          if (text.isEmpty) {
+                            _toast('请输入点评内容');
+                            return;
+                          }
+                          setSheet(() => submitting = true);
+                          try {
+                            final api = context.read<AppState>().api;
+                            final hash = await _formhash();
+                            final msg = await api.addComment(
+                              tid: d.tid,
+                              pid: target.pid,
+                              message: text,
+                              formhash: hash,
+                            );
+                            if (!c.mounted) return;
+                            Navigator.of(c).pop();
+                            _toast(msg);
+                            await _load(1);
+                          } catch (e) {
+                            setSheet(() => submitting = false);
+                            if (c.mounted) {
+                              _toast(e is AppException ? e.displayMessage : '网络错误，请重试');
+                            }
+                          }
+                        },
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: Text(submitting ? '提交中…' : '发表点评'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    ctrl.dispose();
+  }
+
+  // ---------------------------------------------------------------- 举报 / 编辑 / 删除
+
+  static const List<String> _reportReasons = ['广告垃圾', '违规内容', '重复发帖', '恶意灌水', '其他'];
+
+  /// 当前用户是否为该楼层作者。
+  bool _isMine(Post p) {
+    final uid = context.read<AppState>().user?.uid ?? 0;
+    final authorId = p.authorId ?? 0;
+    return uid > 0 && authorId > 0 && authorId == uid;
+  }
+
+  Future<void> _showReportSheet(Post target) async {
+    final d = _detail;
+    if (d == null) return;
+    if (!context.read<AppState>().loggedIn) {
+      _toast('请先登录');
+      return;
+    }
+    final ctrl = TextEditingController();
+    var reason = 1;
+    var submitting = false;
+    await GlassModalSheet.show<void>(
+      context: context,
+      halfSize: 0.45,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (c, setSheet) => Material(
+          color: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                YuanSpace.xl, YuanSpace.md, YuanSpace.xl, YuanSpace.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('举报${target.isOp ? '主题' : '该楼层'}', style: YuanType.titleSm),
+                    const Spacer(),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Navigator.of(c).pop(),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: YuanSpace.sm),
+                for (var i = 0; i < _reportReasons.length; i++)
+                  InkWell(
+                    onTap: () => setSheet(() => reason = i + 1),
+                    borderRadius: BorderRadius.circular(YuanRadius.xs),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: YuanSpace.sm, horizontal: YuanSpace.xs),
+                      child: Row(
+                        children: [
+                          Icon(
+                            reason == i + 1
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                            size: 17,
+                            color: reason == i + 1
+                                ? YuanSemanticColors.of(c).brandPrimary
+                                : YuanSemanticColors.of(c).textTertiary,
+                          ),
+                          const SizedBox(width: YuanSpace.sm),
+                          Expanded(
+                            child: Text(_reportReasons[i], style: YuanType.bodySm),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: YuanSpace.sm),
+                TextField(
+                  controller: ctrl,
+                  maxLines: 3,
+                  minLines: 1,
+                  maxLength: 120,
+                  decoration: const InputDecoration(
+                    hintText: '补充说明（可选）',
+                    counterText: '',
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: YuanSpace.md),
+                FilledButton.icon(
+                  onPressed: submitting
+                      ? null
+                      : () async {
+                          setSheet(() => submitting = true);
+                          try {
+                            final api = context.read<AppState>().api;
+                            final hash = await _formhash();
+                            final msg = await api.report(
+                              tid: d.tid,
+                              fid: d.fid,
+                              pid: target.pid,
+                              formhash: hash,
+                              reason: reason,
+                              message: ctrl.text.trim(),
+                            );
+                            if (!c.mounted) return;
+                            Navigator.of(c).pop();
+                            _toast(msg);
+                          } catch (e) {
+                            setSheet(() => submitting = false);
+                            if (c.mounted) {
+                              _toast(e is AppException ? e.displayMessage : '网络错误，请重试');
+                            }
+                          }
+                        },
+                  icon: const Icon(Icons.flag_rounded, size: 18),
+                  label: Text(submitting ? '提交中…' : '提交举报'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    ctrl.dispose();
+  }
+
+  Future<void> _showEditSheet(Post target) async {
+    final d = _detail;
+    if (d == null) return;
+    if (!_isMine(target)) {
+      _toast('只能编辑自己的内容');
+      return;
+    }
+    final subjectCtrl = TextEditingController(text: target.isOp ? d.title : 'Re: ${d.title}');
+    final messageCtrl = TextEditingController(
+      text: contentPlainText(parsePostContent(target.contentHtml, showLockedHint: false)).trim(),
+    );
+    var submitting = false;
+    await GlassModalSheet.show<void>(
+      context: context,
+      halfSize: 0.6,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (c, setSheet) => Material(
+          color: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                YuanSpace.xl, YuanSpace.md, YuanSpace.xl, YuanSpace.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('编辑${target.isOp ? '主题' : '回复'}', style: YuanType.titleSm),
+                    const Spacer(),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Navigator.of(c).pop(),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: YuanSpace.sm),
+                if (target.isOp)
+                  TextField(
+                    controller: subjectCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      hintText: '标题',
+                      isDense: true,
+                    ),
+                  ),
+                const SizedBox(height: YuanSpace.sm),
+                Expanded(
+                  child: TextField(
+                    controller: messageCtrl,
+                    maxLines: 20,
+                    minLines: 6,
+                    decoration: const InputDecoration(
+                      hintText: '正文（支持 BBCode）',
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: YuanSpace.md),
+                FilledButton.icon(
+                  onPressed: submitting
+                      ? null
+                      : () async {
+                          final msg = messageCtrl.text.trim();
+                          if (msg.isEmpty) {
+                            _toast('正文不能为空');
+                            return;
+                          }
+                          setSheet(() => submitting = true);
+                          try {
+                            final api = context.read<AppState>().api;
+                            final hash = await _formhash();
+                            final result = await api.editPost(
+                              tid: d.tid,
+                              fid: d.fid,
+                              pid: target.pid,
+                              subject: subjectCtrl.text.trim(),
+                              message: msg,
+                              formhash: hash,
+                            );
+                            if (!c.mounted) return;
+                            Navigator.of(c).pop();
+                            _toast(result);
+                            await _load(1);
+                          } catch (e) {
+                            setSheet(() => submitting = false);
+                            if (c.mounted) {
+                              _toast(e is AppException ? e.displayMessage : '网络错误，请重试');
+                            }
+                          }
+                        },
+                  icon: const Icon(Icons.save_rounded, size: 18),
+                  label: Text(submitting ? '保存中…' : '保存修改'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    subjectCtrl.dispose();
+    messageCtrl.dispose();
+  }
+
+  Future<void> _confirmDeletePost(Post target) async {
+    final d = _detail;
+    if (d == null) return;
+    if (!_isMine(target)) {
+      _toast('只能删除自己的内容');
+      return;
+    }
+    final api = context.read<AppState>().api;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dc) => AlertDialog(
+        title: const Text('删除确认'),
+        content: Text(
+          '确定删除${target.isOp ? '整篇主题' : '第 ${target.floor ?? ''} 楼的回复'}吗？删除后不可恢复。',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dc, true), child: const Text('删除')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final hash = await _formhash();
+      final msg = await api.deletePost(
+        tid: d.tid,
+        fid: d.fid,
+        pid: target.pid,
+        formhash: hash,
+      );
+      if (!mounted) return;
+      _toast(msg);
+      if (target.isOp) {
+        Navigator.of(context).maybePop();
+        return;
+      }
+      await _load(1);
+    } catch (e) {
+      if (mounted) _toast(e is AppException ? e.displayMessage : '网络错误，请重试');
+    }
+  }
+
+  /// 楼层操作菜单（复制 / 举报 / 打赏 / 编辑 / 删除）。
+  Widget _postMenu(Post p, {required bool compact}) {
+    return PopupMenuButton<String>(
+      tooltip: '更多操作',
+      padding: EdgeInsets.zero,
+      iconSize: 18,
+      icon: Icon(Icons.more_horiz_rounded, color: YuanSemanticColors.of(context).textTertiary),
+      onSelected: (value) async {
+        switch (value) {
+          case 'copy':
+            _copyText(
+              contentPlainText(parsePostContent(p.contentHtml, showLockedHint: false)).trim(),
+            );
+          case 'rate':
+            await _showRateSheet(p);
+          case 'report':
+            await _showReportSheet(p);
+          case 'edit':
+            await _showEditSheet(p);
+          case 'delete':
+            await _confirmDeletePost(p);
+        }
+      },
+      itemBuilder: (c) => [
+        const PopupMenuItem(
+          value: 'copy',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.link_rounded, size: 20),
+            title: Text('复制正文'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'report',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.flag_outlined, size: 20),
+            title: Text('举报'),
+          ),
+        ),
+        if (p.canRate && !_isMine(p))
+          PopupMenuItem(
+            value: 'rate',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.volunteer_activism_outlined, size: 20),
+              title: Text(p.isOp ? '赞赏' : '打赏'),
+            ),
+          ),
+        if (_isMine(p)) ...[
+          const PopupMenuItem(
+            value: 'edit',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.edit_outlined, size: 20),
+              title: Text('编辑'),
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'delete',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.delete_outline_rounded, size: 20),
+              title: Text('删除'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   String _floorLabel(Post p, int index) {
-    final raw = (p.floor ?? '').trim();
-    if (raw.isNotEmpty && !raw.contains('楼主') && !raw.contains('#')) return raw;
+    final label = p.floorLabel;
+    if (label.isNotEmpty) return label;
     switch (index) {
       case 0:
         return '沙发';
@@ -765,7 +1672,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
   Future<void> _purchase(ThreadDetail d) async {
     if (_buying) return;
     if (!context.read<AppState>().loggedIn) {
-      _toast('购买前请先登录');
+      _toast('请先登录');
       return;
     }
     setState(() => _buying = true);
@@ -775,7 +1682,7 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
       _toast(res.message);
       if (res.success) await _load(1);
     } catch (e) {
-      if (mounted) _toast('购买失败：$e');
+      if (mounted) _toast('网络错误，请重试');
     } finally {
       if (mounted) setState(() => _buying = false);
     }
@@ -1071,7 +1978,20 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
       favorited: _favorited,
       sending: _sending,
       busy: _actionBusy,
+      replyTargetPid: _replyTargetPid,
+      replyTargetAuthor: _replyTargetAuthor,
+      onReplyTargetCleared: () => setState(() {
+        _replyTargetPid = null;
+        _replyTargetAuthor = null;
+        _replyCtrl.text = '';
+      }),
     );
+  }
+
+  /// 清空回复目标（发送成功后调用）。
+  void _clearReplyTarget() {
+    _replyTargetPid = null;
+    _replyTargetAuthor = null;
   }
 
   /// 点赞（站点叫「支持」）：一次性操作，成功后本地保持高亮。

@@ -233,5 +233,56 @@ class DiscuzClient {
     }
   }
 
+  /// 上传文件（multipart form-data）。
+  ///
+  /// Discuz 的 swfupload 上传接口要求 `Filedata` 字段携带文件字节，
+  /// 同时 URL 上带 `mod=swfupload&operation=upload` 等参数，
+  /// 表单字段带 `uid` 和 `hash`（上传凭证）。
+  Future<DResponse> postFile(
+    String path,
+    Map<String, String> fields, {
+    required String fieldName,
+    required String filename,
+    required List<int> bytes,
+    String? referer,
+  }) async {
+    final uri = Uri.parse(path.startsWith('http') ? path : '$baseUrl/$path');
+    try {
+      final req = http.MultipartRequest('POST', uri)
+        ..followRedirects = false
+        ..headers.addAll(_headers(uri: uri, referer: referer));
+      req.fields.addAll(fields);
+      req.files.add(
+        http.MultipartFile.fromBytes(fieldName, bytes, filename: filename),
+      );
+      final streamed = await _client.send(req)
+          .timeout(const Duration(seconds: 60));
+      _absorb(streamed);
+      if (streamed.statusCode >= 300 && streamed.statusCode < 400) {
+        final location = streamed.headers['location'];
+        await streamed.stream.drain<void>();
+        if (location != null && location.isNotEmpty) {
+          final nextUri = uri.resolve(location);
+          return await get(nextUri.toString(), referer: referer);
+        }
+      }
+      _throwIfMapped(streamed.statusCode);
+      final bodyBytes = await streamed.stream.toBytes();
+      return DResponse(
+        streamed.statusCode,
+        utf8.decode(bodyBytes, allowMalformed: true),
+        uri,
+      );
+    } on AppException {
+      rethrow;
+    } on TimeoutException {
+      throw AppException.timeout();
+    } on SocketException {
+      throw AppException.network();
+    } on http.ClientException catch (e) {
+      throw AppException.network(message: e.message, cause: e);
+    }
+  }
+
   void close() => _client.close();
 }

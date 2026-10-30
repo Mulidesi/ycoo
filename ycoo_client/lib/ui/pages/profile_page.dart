@@ -9,9 +9,11 @@ import '../../models/models.dart';
 import '../../platform/apk_installer.dart';
 import '../../state/app_state.dart';
 import '../widgets/common.dart';
-import 'image_diag_page.dart';
+import 'download_history_page.dart';
 import 'follow_list_page.dart';
+import 'image_diag_page.dart';
 import 'my_posts_page.dart';
+import 'offline_cache_page.dart';
 import 'post_filter_page.dart';
 import 'sign_page.dart';
 import 'site_settings_page.dart';
@@ -108,6 +110,34 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
               ),
             ),
           ],
+          const SizedBox(height: 14),
+          _sectionTitle(theme, '离线与下载'),
+          SectionCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const _TileIcon(Icons.cloud_off_rounded, YuanColors.brandPrimaryLight),
+                  title: const Text('离线缓存', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  subtitle: const Text('帖子详情页可缓存帖子供离线阅读', style: TextStyle(fontSize: 11.5)),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const OfflineCachePage()),
+                  ),
+                ),
+                const Divider(indent: 56),
+                ListTile(
+                  leading: const _TileIcon(Icons.download_outlined, YuanColors.successLight),
+                  title: const Text('下载历史', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  subtitle: const Text('查看附件下载记录，支持重新下载', style: TextStyle(fontSize: 11.5)),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const DownloadHistoryPage()),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 14),
           _sectionTitle(theme, '自动功能'),
           SectionCard(

@@ -26,6 +26,9 @@ dependencies:
   liquid_glass_widgets: ^1.14.1
   # 系统分享面板（帖子长图 / 文件）
   share_plus: ^10.1.4
+  # 发帖页图片 / 附件选择
+  image_picker: ^1.2.4
+  file_picker: ^11.0.3
 
 dev_dependencies:
   flutter_test:

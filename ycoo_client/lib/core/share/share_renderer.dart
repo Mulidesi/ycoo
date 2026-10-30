@@ -404,7 +404,37 @@ class ShareRenderer {
               ..strokeWidth = 1,
           );
         });
+      case BlockKind.table:
+      case BlockKind.h1:
+      case BlockKind.h2:
+      case BlockKind.h3:
+      case BlockKind.h4:
+      case BlockKind.h5:
+      case BlockKind.h6:
+        return _textBlock(block, contentW, pad);
+      case BlockKind.video:
+      case BlockKind.iframe:
+        return _linkBlock(block, contentW, pad);
     }
+  }
+
+  _Blk? _textBlock(ContentBlock block, double contentW, double pad) {
+    final p = _runsParagraph(block.runs, contentW, 16, _body);
+    return _Blk(p.height + 14, p.computeLineMetrics().length, (c, top) {
+      c.drawParagraph(p, ui.Offset(pad, top));
+    });
+  }
+
+  _Blk? _linkBlock(ContentBlock block, double contentW, double pad) {
+    final url = block.videoUrl ?? block.iframeUrl ?? '';
+    final label = _paragraph(
+      url,
+      _style(14, _link, height: 1.2),
+      contentW,
+    );
+    return _Blk(label.height + 14, 0, (c, top) {
+      c.drawParagraph(label, ui.Offset(pad, top));
+    });
   }
 
   void _drawAvatar(

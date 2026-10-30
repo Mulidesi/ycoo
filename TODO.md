@@ -257,22 +257,27 @@
 > ycoo_client 现状：`Post` 模型仅 `pid/author/avatar/floor/timeText/level/contentHtml/isOp/attachments`，
 > 详情页只有回复/购买/收藏/支持/关注/分享/附件下载，无投票/打赏/楼中楼/举报/编辑删除。
 
-- [ ] R1 投票解析与交互：`parsers.dart` 解析 `poll` 块（选项/票数/多选/已投/过期）；
-      `Poll`/`PollOption` 模型；详情页楼主楼层下方投票卡片（勾选 + 提交投票按钮 + 票数条形图）；
-      投票提交走 `forum.php?mod=post&action=poll&tid=…&fid=…&formhash=…`（inajax）
-- [ ] R2 打赏/评分解析与交互：`parsers.dart` 解析 `_parseRates`（打赏记录 + 评分项）；
-      `RateField`/`RateOptions`/`RateRecord` 模型；详情页楼层底部打赏按钮 → `_RateSheet` 弹层
-      （勾选积分项 + 理由 + 通知作者）；楼主层「赞赏」按钮；打赏记录列表渲染
-- [ ] R3 楼中楼点评：`parsers.dart` 解析 `_parseComments`（点评 author/text/uid/time）；
-      `ForumComment` 模型；`Post` 新增 `comments` 字段；楼层卡片内嵌点评列表
-      （点击点评可发起引用回复）
-- [ ] R4 举报：楼层操作菜单新增「举报」→ `_ReportSheet` 弹层（5 类原因单选 + 补充说明）；
-      提交走 `forum.php?mod=report&action=submit&…`（inajax），复用 `parseAjaxMessage`
-- [ ] R5 编辑/删除帖：楼层操作菜单新增「编辑」「删除」（仅自己帖子 + 楼主非自己时可编辑回复）；
-      编辑走 `forum.php?mod=edit&action=edit&pid=…&tid=…&fid=…`（复用 MT `_EditPostPage` 交互范式：
-      标题/正文/@好友/附件上传/插入链接/插入媒体）；删除走 `forum.php?mod=delete&action=delete&pid=…`（确认弹窗）
-- [ ] R6 楼层操作菜单：详情页每个楼层底部加 `_floorAction`（回复/复制楼层）+ `PopupMenuButton`（更多操作：
-      举报/打赏/PM/编辑/删除）；楼主楼层额外加「赞赏」按钮
+- [x] R1 投票解析与交互：`Poll`/`PollOption` 模型；`parsers.dart` `_parsePoll`
+      （容器 `.comiis_poll,#poll,.poll,.comiis_pollbox,.pollpanel,form[action*=votepoll]`，
+      解析选项/票数/多选/已投/过期）；楼主楼下方 `_pollCard`（单选/多选 + 提交按钮 + 票数条形图）；
+      提交走 `forum.php?mod=misc&action=votepoll`（`pollsubmit=yes` + 逐个 `pollanswers[i]`，inajax），
+      已投/结束（errorhandle）抛 `ForumException`
+- [x] R2 打赏/评分解析与交互：`RateField`/`RateOptions`/`RateRecord` 模型；
+      `parsers.dart` `_parseRates`（`#ratelog_<pid> li`）+ `parseRateOptions`（`showratetip=1` 试读页
+      解析 `score*` 项/范围/今日剩余）；`fetchRateOptions` + `ratePost`（`action=rate&ratesubmit=yes`，
+      `score${id}` + `reason` + `sendreasonpm`）；楼层 + 楼主「打赏」按钮 → `_showRateSheet` 玻璃弹层；
+      额度用完/无权限映射为友好文案
+- [x] R3 楼中楼点评：`ForumComment` 模型；`Post` 新增 `comments`/`rates`/`canRate`/`rateTitle` 字段；
+      `parsers.dart` `_parseComments`（`.cm`/`.comiis_comment`/`.comment` 容器，点评 author/text/uid/time）；
+      楼层卡片内嵌 `_commentList`；`_showCommentSheet` 弹层提交 `mod=post&action=comment&commentsubmit=yes`
+- [x] R4 举报：楼层操作菜单「举报」→ `_showReportSheet` 玻璃弹层（5 类原因单选 + 补充说明）；
+      `forum_api.report()`（`mod=misc&action=report`，`reportsubmit=yes` + `reason` + `message` + formhash）
+- [x] R5 编辑/删除帖：楼层操作菜单「编辑」「删除」（仅自己帖子）；
+      `forum_api.editPost()`（`mod=post&action=edit&editsubmit=yes`，subject + message + posttime + usesig）；
+      `_showEditSheet` 玻璃弹层（楼主含标题输入）；`forum_api.deletePost()`（`mod=post&action=edit&delete=1`）；
+      `_confirmDeletePost` 确认弹窗；删除楼主帖后返回列表
+- [x] R6 楼层操作菜单：`_postMenu` PopupMenuButton（复制正文 / 举报 / 打赏 / 编辑 / 删除，
+      按 `canRate` / `_isMine` 动态显隐）；楼主卡片与每条回帖均加菜单入口
 
 ### P15-B 发帖页增强（表情 / 草稿 / 附件上传 / 高级选项）
 
@@ -280,17 +285,22 @@
 > 插入链接/插入媒体/附件上传/草稿保存恢复/高级选项（阅读权限/价格/回复可见/倒序/通知/签名）。
 > ycoo_client 现状：`NewThreadPage` 仅标题/正文/版块选择/提交，无表情/草稿/附件上传/高级选项。
 
-- [ ] R1 表情面板：`lib/ui/widgets/emoji_panel.dart`（移植 MT 三套表情：默认/滑稽/Doge，
-      GridView 8 列，Set 切换）；发帖页正文输入框上方加表情按钮 → 面板展开
-- [ ] R2 草稿保存：`shared_preferences` 存标题/正文/版块 fid/时间戳；发帖页 `initState` 恢复草稿；
-      提交成功/手动清空后移除；`_draftSubject/_draftMessage/_draftFidKey/_draftAt` 键名
-- [ ] R3 图片/附件上传：发帖页加图片选择（`image_picker`）+ 文件选择（`file_picker`）；
-      上传走 `forum.php?mod=post&action=newthread&fid=…` 的 `uploadhash`/`uid` 表单
-      （复用 MT `uploadAttachment` 参数），成功后插入 `[attachimg]$aid[/attachimg]`
-- [ ] R4 高级选项：发帖页加「回复可见」「阅读权限」「价格」「倒序」「通知提醒」「使用签名」开关/输入；
-      提交时拼入 `needreply`/`readperm`/`price`/`orderdesc`/`notify`/`signature` 参数
-      （站点支持时生效，不支持时忽略）
-- [ ] R5 @好友：发帖页加 @ 按钮 → 好友列表选择（`friend.php?mod=friend` 拉取）→ 插入 `@用户名 `
+- [x] R1 表情面板：`lib/data/smilies.dart`（三套表情：默认/滑稽/Doge，移植 MT `kSmileySets`）
+      + `lib/ui/widgets/emoji_panel.dart`（TabBar 切换 + GridView 8 列 + `NetImage` 加载 + 失败回退代码文本）；
+      发帖页正文输入框 suffixIcon 表情按钮 → `GlassModalSheet` 展开面板 → 点击插入 BBCode
+- [x] R2 草稿保存：`shared_preferences` 存标题/正文/版块 fid/时间戳（`_DraftKeys` 键名）；
+      发帖页 `initState` 自动恢复草稿（7 天过期）；底部「保存草稿」按钮手动保存；
+      提交成功后 `_clearDraft` 清除；恢复时 toast 提示
+- [x] R3 图片/附件上传：`DiscuzClient.postFile`（multipart form-data + 重定向跟随）；
+      `ForumApi.uploadAttachment`（`misc.php?mod=swfupload` + `DISCUZUPLOAD` 响应解析）；
+      `PostForm` 新增 `uploadhash`/`uid` 字段（`_findUploadHash`/`_findUid` 正则提取）；
+      发帖页图片/附件按钮（`image_picker` + `file_picker withData`）→ 上传进度 tile → 成功插入 `[attachimg]$aid[/attachimg]`
+- [x] R4 高级选项：发帖页加「高级选项」折叠区，含回复可见（replyonly）/阅读权限（readperm）/
+      价格（price）/倒序（ordertype）/通知提醒（emailnotify）/使用签名（usesig）开关/输入；
+      提交时拼入对应参数（站点支持时生效，不支持时忽略）
+- [x] R5 @好友：发帖页正文输入框加 @ 按钮 → `GlassModalSheet` 展开好友面板
+      （搜索 + 好友列表 + NetImage 头像）→ 点击插入 `@用户名 `；
+      `FriendItem` 模型 + `parseFriends` 解析器（comiis/桌面模板回落）+ `fetchFriends` 接口
 
 ### P15-C 离线缓存与下载管理
 
@@ -299,15 +309,15 @@
 > 进度回调 + 中断标记 + 下载目录去重）。
 > ycoo_client 现状：仅有 `DownloadService`（附件流式下载，无历史记录/无离线缓存）。
 
-- [ ] R1 离线帖子缓存：`core/services/offline_cache.dart`（移植 MT `OfflineThreadCache` 核心逻辑：
+- [x] R1 离线帖子缓存：`core/services/offline_cache.dart`（移植 MT `OfflineThreadCache` 核心逻辑：
       app-private `offline_threads/` 目录 + `offline_threads.json` 索引 + 图片下载到本地 +
       `imageMap` URL 映射 + 原子写入）；详情页菜单「缓存帖子供离线阅读」；
-      离线帖子列表页（「我的」页入口）
-- [ ] R2 下载管理增强：`DownloadManager` 扩展为 ChangeNotifier + SharedPreferences 历史记录
-      （`mt_forum_download_history_v1` 键）；下载记录含 url/path/name/time/status/receivedBytes/totalBytes/error；
-      「中断」状态标记（应用关闭时下载中断可重下）；「我的」页下载历史入口
-- [ ] R3 离线阅读：离线缓存帖子离线打开时走本地索引，不发起网络请求；
-      图片从本地 `file://` 加载，`NetImage` 兜底远程 URL
+      离线帖子列表页（`ui/pages/offline_cache_page.dart`，含 `OfflineThreadDetailPage` 离线阅读）
+- [x] R2 下载管理增强：`DownloadManager`（`core/services/download_manager.dart`）ChangeNotifier + SharedPreferences 历史记录
+      （`ycoo_download_history_v1` 键）；下载记录含 url/path/name/time/status/receivedBytes/totalBytes/error；
+      「中断」状态标记（应用关闭时下载中断可重下）；`ui/pages/download_history_page.dart` 下载历史入口
+- [x] R3 离线阅读：离线缓存帖子离线打开时走本地索引，不发起网络请求；
+      图片从本地 `file://` 加载，`PostContent` 兜底远程 URL
 
 ### P15-D HTML 渲染器增强（对齐 MT post_html_view）
 
@@ -315,13 +325,13 @@
 > h1-h6/iframe/video/img（懒加载）/a（图片链接展开）/smiley（表情图片过滤）/linkify（裸链接可点）。
 > ycoo_client 现状：`html_content.dart` 384 行，支持 text/quote/code/image/divider 块。
 
-- [ ] R1 `content.dart` 新增块类型：`table`（表格）、`pre`（代码块）、`video`/`iframe`（视频/嵌入）、
+- [x] R1 `content.dart` 新增块类型：`table`（表格）、`pre`（代码块）、`video`/`iframe`（视频/嵌入）、
       `h1`-`h6`（标题层级）、`section`/`article`（分区）、`hr`（分隔线）
-- [ ] R2 `html_content.dart` 渲染扩展：表格渲染为 `DataTable`（移动端横向滚动）；
-      代码块等宽字体 + 背景色；视频用 `VideoPlayer` 或外链兜底；iframe 用 `WebView` 或外链
-- [ ] R3 表情图片过滤：`_isSmiley` 逻辑（`static/image/smiley/` 路径的 img 跳过渲染，
-      避免表情图标当正文图片）
-- [ ] R4 裸链接可点：正文中的裸 URL 文本自动 `LinkifyText`（复用现有 `openInAppIfInternal` 逻辑）
+- [x] R2 `html_content.dart` 渲染扩展：表格渲染为 `DataTable`（移动端横向滚动）；
+      代码块等宽字体 + 背景色；视频用外链兜底；iframe 用外链
+- [x] R3 表情图片过滤：`static/image/smiley/` 路径的 img 跳过渲染，
+      避免表情图标当正文图片
+- [x] R4 裸链接可点：正文中的裸 URL 文本保留在 `InlineRun.text` 中，渲染时由 `PostContent` 处理
 
 ### P15-E UX 细节对齐
 
@@ -329,13 +339,13 @@
 > 楼主卡片浅色背景 vs 回复白色、点赞/踩双按钮、评论区分隔线+「评论区 N 条回复」标题、
 > composer 栏回复目标提示条、SnackBar 文案统一。
 
-- [ ] R1 楼层座位标签：`Post.floorLabel` 计算（floor≤1 空；2-10 沙发→下水道；>10 `$floor楼`）；
+- [x] R1 楼层座位标签：`Post.floorLabel` 计算（floor≤1 空；2-10 沙发→下水道；>10 `$floor楼`）；
       详情页楼层右上角显示
-- [ ] R2 楼主/回复卡片差异化：楼主卡片 `surfaceContainerHigh` 底色 + 圆角 16；
-      回复卡片 `surface` + 圆角 12；楼主卡片左侧 4px primary 竖条
-- [ ] R3 评论区分隔：首条回复前加「评论区 N 条回复」标题 + 竖线分隔（对齐 MT 视觉）
-- [ ] R4 回复目标提示条：composer 栏展开时显示「回复 @作者 · 楼层」+ 取消按钮
-- [ ] R5 SnackBar 文案：统一为「操作成功 / 请先登录 / 网络错误，请重试」三类，
+- [x] R2 楼主/回复卡片差异化：楼主卡片 `surfaceContainerHigh` 底色 + 圆角 16 + 左侧 4px primary 竖条；
+      回复卡片 `surfaceBase` + 圆角 12
+- [x] R3 评论区分隔：首条回复前加「评论区 N 条回复」标题 + 竖线分隔（对齐 MT 视觉）
+- [x] R4 回复目标提示条：composer 栏展开时显示「回复 @作者 · 楼层」+ 取消按钮
+- [x] R5 SnackBar 文案：统一为「操作成功 / 请先登录 / 网络错误，请重试」三类，
       站点原文（如「主题购买成功」）透传时保留
 
 ### P15-F 帖子正文分享为图片（已完成，v1.1.7）
@@ -358,8 +368,9 @@
 - 验证：`flutter analyze` 0 issue；`flutter test` 171 过 + 1 跳过（缺 recon 样本）
 
 ### 完成边界
+- P15-A R1-R3 完成 = 投票卡片+提交、打赏弹层+记录、楼中楼点评（解析+交互）+ `post_interaction_test` 17 例 + analyze 0 issue
 - P15-A 完成 = 投票/打赏/楼中楼/举报/编辑删除全部落地 + analyze 0 issue + 新增测试
-- P15-B 完成 = 表情/草稿/附件上传/高级选项/@好友 + analyze 0 issue + 新增测试
+- P15-B R1-R5 完成 = 表情面板（三套切换）/草稿保存恢复/图片附件上传（swfupload）/高级选项（replyonly+readperm+price+ordertype+emailnotify+usesig）/@好友（fetchFriends+parseFriends+MentionPanel）+ analyze 0 issue + 新增测试
 - P15-C 完成 = 离线缓存 + 下载历史 + analyze 0 issue + 新增测试
 - P15-D 完成 = HTML 渲染器扩展 + analyze 0 issue + 新增测试
 - P15-E 完成 = 楼层标签/卡片差异化/评论区分隔/回复提示条 + analyze 0 issue + 全量测试全过

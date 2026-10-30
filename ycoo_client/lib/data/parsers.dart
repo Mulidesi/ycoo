@@ -313,6 +313,177 @@ int _parseTotalPages(Document doc, int page) {
   return total;
 }
 
+/// 主题投票（楼主楼 `special=1`）。容器选择器覆盖 PC 与 comiis 移动模板：
+/// `.comiis_poll, #poll, .poll, .comiis_pollbox, .pollpanel, form[action*="votepoll"]`。
+Poll? _parsePoll(Document doc) {
+  final container = doc.querySelector(
+    '.comiis_poll, #poll, .poll, .comiis_pollbox, .pollpanel, form[action*="votepoll"]',
+  );
+  if (container == null) return null;
+
+  final options = <PollOption>[];
+  var multiple = false;
+  for (final input in container.querySelectorAll('input')) {
+    final type = (input.attributes['type'] ?? '').toLowerCase();
+    if (type != 'radio' && type != 'checkbox') continue;
+    final name = input.attributes['name'] ?? '';
+    if (!name.contains('pollanswer') && !name.contains('polloption')) continue;
+    final id = int.tryParse(input.attributes['value'] ?? '') ?? 0;
+    if (id <= 0) continue;
+    if (type == 'checkbox') multiple = true;
+    final raw = _text(input.parent);
+    final votes = RegExp(r'(\d+)\s*票').firstMatch(raw)?.group(1);
+    final text = raw
+        .replaceAll(RegExp(r'[（(]?\s*\d+\s*票[）)]?'), '')
+        .replaceAll(RegExp(r'\d+(\.\d+)?%'), '')
+        .trim();
+    if (text.isEmpty) continue;
+    options.add(PollOption(id: id, text: text, votes: int.tryParse(votes ?? '') ?? 0));
+  }
+
+  if (options.isEmpty) {
+    for (final label in container.querySelectorAll('label, li, .polloption')) {
+      final text = _text(label);
+      if (text.isEmpty || text.length > 80) continue;
+      final votes = RegExp(r'(\d+)\s*票').firstMatch(text);
+      options.add(PollOption(
+        id: 0,
+        text: text.replaceAll(RegExp(r'[（(]?\s*\d+\s*票[）)]?'), '').trim(),
+        votes: int.tryParse(votes?.group(1) ?? '') ?? 0,
+      ));
+    }
+  }
+  if (options.isEmpty) return null;
+
+  final text = _text(container);
+  final total = int.tryParse(RegExp(r'共\s*(\d+)\s*人参与').firstMatch(text)?.group(1) ?? '') ??
+      options.fold<int>(0, (sum, option) => sum + option.votes);
+  final hasForm = container.querySelector('input[type=radio], input[type=checkbox]') != null;
+  return Poll(
+    options: options,
+    multiple: multiple || text.contains('多选'),
+    total: total,
+    voted: !hasForm && options.any((option) => option.votes > 0),
+    expired: text.contains('投票已结束') || text.contains('已结束'),
+  );
+}
+
+/// 打赏记录：`#ratelog_<pid>` 内每条 `li#rate_<pid>_<uid>`。
+List<RateRecord> _parseRates(Element el, int pid) {
+  final box = el.querySelector('#ratelog_$pid') ?? el.querySelector('.comiis_view_lcrate');
+  if (box == null) return const <RateRecord>[];
+  final records = <RateRecord>[];
+  for (final li in box.querySelectorAll('li')) {
+    final score = _text(li.querySelector('.f_a'));
+    final link = li.querySelector('a.f_c') ?? li.querySelector('a[href*="uid="]');
+    final name = _text(link);
+    final reason = _text(li.querySelector('p'));
+    if (name.isEmpty && score.isEmpty) continue;
+    final uid = _uidFromHref(link?.attributes['href']) ?? 0;
+    records.add(RateRecord(username: name, uid: uid, score: score, reason: reason));
+    if (records.length >= 20) break;
+  }
+  return records;
+}
+
+/// 楼中楼点评：兼容 Discuz 手机模板与桌面模板的几种容器。
+List<ForumComment> _parseComments(Element el) {
+  final comments = <ForumComment>[];
+  for (final container in el.querySelectorAll('.cm, .comiis_comment, .comment')) {
+    var items = container.querySelectorAll('.cm_item');
+    if (items.isEmpty) {
+      items = container.children.where((child) => _text(child).isNotEmpty).toList();
+    }
+    for (final item in items) {
+      final text = _text(item.querySelector('.cm_text')).isNotEmpty
+          ? _text(item.querySelector('.cm_text'))
+          : _text(item);
+      if (text.isEmpty || text.length > 600) continue;
+      final authorLink = item.querySelector('.cm_name, a[href*="uid="]');
+      final author = _text(authorLink);
+      final uid = _uidFromHref(authorLink?.attributes['href']) ?? 0;
+      final time = _text(item.querySelector('.cm_time'));
+      comments.add(ForumComment(author: author, text: text, uid: uid, time: time));
+      if (comments.length >= 30) return comments;
+    }
+  }
+  return comments;
+}
+
+/// 解析站点 `showratetip=1` 试读页，得到当前用户组可打赏项与今日剩余额度。
+///
+/// `input[name^="score"], select[name^="score"]` 是最准确的来源，
+/// 站点已按 24 小时剩余额度裁剪可选分值。
+RateOptions parseRateOptions(String html) {
+  final doc = html_parser.parse(html);
+  final fields = <RateField>[];
+  final seen = <int>{};
+  for (final control in doc.querySelectorAll('input[name^="score"], select[name^="score"]')) {
+    final name = control.attributes['name'] ?? '';
+    final id = int.tryParse(name.replaceFirst('score', '')) ?? 0;
+    if (id <= 0 || !seen.add(id)) continue;
+
+    final presets = <int>[];
+    if (control.localName == 'select') {
+      for (final option in control.querySelectorAll('option')) {
+        final raw = (option.attributes['value'] ?? '').isNotEmpty
+            ? option.attributes['value']!
+            : _text(option);
+        final value = int.tryParse(raw.replaceAll('+', ''));
+        if (value != null && !presets.contains(value)) presets.add(value);
+      }
+    } else {
+      for (final item in doc.querySelectorAll('#scoreoption$id li')) {
+        final value = int.tryParse(_text(item).replaceAll('+', ''));
+        if (value != null && !presets.contains(value)) presets.add(value);
+      }
+    }
+    presets.sort();
+
+    Element? row;
+    for (final candidate in doc.querySelectorAll('tr')) {
+      if (candidate.querySelector('[name="$name"]') != null) {
+        row = candidate;
+        break;
+      }
+    }
+
+    final text = _text(row);
+    final range = RegExp(r'(-?\d+)\s*~\s*(-?\d+)').firstMatch(text);
+    var min = int.tryParse(range?.group(1) ?? '') ?? 0;
+    var max = int.tryParse(range?.group(2) ?? '') ?? 1;
+    if (presets.isNotEmpty) {
+      min = presets.first;
+      max = presets.last;
+    }
+    if (max < min) max = min;
+    if (max > 100) max = 100;
+
+    final cells = row?.querySelectorAll('td') ?? const <Element>[];
+    var left = max;
+    final leftMatch = RegExp(r'剩余\s*[:：]?\s*(\d+)').firstMatch(text);
+    if (leftMatch != null) {
+      left = int.tryParse(leftMatch.group(1) ?? '') ?? max;
+    } else if (cells.length >= 4) {
+      left = int.tryParse(RegExp(r'\d+').firstMatch(_text(cells[3]))?.group(1) ?? '') ?? max;
+    }
+    if (left < 0) left = 0;
+
+    final labelSource = row != null && row.children.isNotEmpty
+        ? _text(row.children.first)
+        : _text(control.parent);
+    var label = labelSource.replaceAll(RegExp(r'[0-9\s]'), '');
+    if (label.isEmpty || label.length > 8) label = '积分 $id';
+
+    fields.add(RateField(id: id, label: label, min: min, max: max, left: left, presets: presets));
+  }
+  if (fields.isEmpty) return RateOptions.fallback;
+  return RateOptions(
+    fields: fields,
+    canNotify: doc.querySelector('input[name="sendreasonpm"]') != null,
+  );
+}
+
 ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
   final doc = html_parser.parse(html);
 
@@ -342,6 +513,7 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
   String? payUrl;
   String? payPriceText;
   var payBuyers = 0;
+  final threadPoll = _parsePoll(doc);
 
   final postDivs = doc.querySelectorAll('div[id^="post_"]');
   for (final p in postDivs) {
@@ -510,6 +682,14 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
     var bodyHtml = contentEl.innerHtml;
     if (attachImgs.isNotEmpty) bodyHtml += attachImgs.join();
 
+    // 打赏入口：PC 模板 `.comiis_rate.cl` 里的 `a.comiis_openrebox`（href 带 action=rate），
+    // 移动模板直接渲染 `.comiis_rate a[href*="action=rate"]`。
+    final rateEntry = p.querySelector('.comiis_rate a[href*="action=rate"]') ??
+        p.querySelector('a.comiis_openrebox[href*="action=rate"]') ??
+        p.querySelector('a[href*="action=rate"]');
+    final rateTitleEl = rateEntry == null ? null : (rateEntry.parent ?? rateEntry);
+    final rateTitle = _text(rateTitleEl).replaceAll(RegExp(r'\s*打赏.*$'), '').trim();
+
     posts.add(Post(
       pid: pid,
       author: _text(nameEl).isEmpty ? '匿名' : _text(nameEl),
@@ -523,6 +703,11 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
       contentHtml: bodyHtml,
       isOp: isOp,
       attachments: postAtts,
+      poll: isOp ? threadPoll : null,
+      comments: _parseComments(p),
+      rates: _parseRates(p, pid),
+      rateTitle: rateTitle.isEmpty ? null : rateTitle,
+      canRate: rateEntry != null,
     ));
   }
 
@@ -1188,13 +1373,43 @@ PostForm parsePostForm(String html) {
   }
 
   final action = form.attributes['action']?.replaceAll('&amp;', '&');
+  final uploadhash = _findUploadHash(html);
+  final uid = _findUid(html);
   return PostForm(
     canPost: action != null && action.isNotEmpty,
     action: action,
     formhash: hidden('formhash') ?? parseFormhash(html),
     posttime: hidden('posttime'),
     categories: categories,
+    uploadhash: uploadhash,
+    uid: uid,
   );
+}
+
+/// 从发帖页提取 swfupload 上传凭证 `hash`。
+///
+/// Discuz 将凭证放在 JS 配置中，形如 `hash: "xxxxxxxx"` 或
+/// `name="hash" value="xxxxxxxx"`；站点可能用 `uploadhash` 变量名。
+String _findUploadHash(String html) {
+  final patterns = <RegExp>[
+    RegExp(r'''hash\s*:\s*["']([0-9a-zA-Z]{16,40})["']'''),
+    RegExp(
+      r'''name=["']hash["'][^>]*?value=["']([0-9a-zA-Z]{16,40})["']''',
+      caseSensitive: false,
+    ),
+    RegExp(r'''uploadhash\s*=\s*["']([0-9a-zA-Z]{16,40})["']'''),
+  ];
+  for (final p in patterns) {
+    final m = p.firstMatch(html);
+    if (m != null) return m.group(1)!;
+  }
+  return '';
+}
+
+/// 从页面提取当前用户 uid（`discuz_uid` JS 变量）。
+int _findUid(String html) {
+  final m = RegExp(r'''discuz_uid\s*=\s*['"]?(\d+)''').firstMatch(html);
+  return int.tryParse(m?.group(1) ?? '0') ?? 0;
 }
 
 /// 从发帖页提取站点提示（通常位于 `div.alert_error` / `#messagetext`）。
@@ -1278,4 +1493,84 @@ String htmlToPlainText(String html, {int maxLen = 160}) {
   final t = (doc.body?.text ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
   if (t.length <= maxLen) return t;
   return '${t.substring(0, maxLen)}…';
+}
+
+/// 清理文本中的多余空白和私有区字符。
+String _cleanText(String text) => text
+    .replaceAll('\u00a0', ' ')
+    .replaceAll(RegExp(r'[\uE000-\uF8FF\uFFFD]'), '')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
+
+/// 从 <img> 元素中提取可用的头像 URL。
+String _pickImageUrl(Element img) {
+  const lazyAttrs = [
+    'comiis_loadimages',
+    'data-src',
+    'data-original',
+    'file',
+    'zoomfile',
+    'longdesc',
+  ];
+  bool usable(String v) =>
+      v.isNotEmpty &&
+      !v.contains('none.png') &&
+      !v.contains('none.gif') &&
+      !v.contains('imageloading.gif') &&
+      !v.contains('noavatar');
+
+  for (final attr in lazyAttrs) {
+    final v = (img.attributes[attr] ?? '').trim();
+    if (usable(v)) return absoluteUrl(v);
+  }
+  final src = (img.attributes['src'] ?? '').trim();
+  return usable(src) ? absoluteUrl(src) : '';
+}
+
+/// 解析好友列表页 HTML（`home.php?mod=space&do=friend&view=me`）。
+///
+/// 兼容 comiis 移动端模板（`.comiis_userlist01 li`）与桌面模板
+/// （`#friend_ul li` / `ul.buddy li`）。
+List<FriendItem> parseFriends(String html) {
+  final doc = html_parser.parse(html);
+  final items = <FriendItem>[];
+  final seen = <int>{};
+
+  for (final selector in
+      const ['.comiis_userlist01 li', '#friend_ul li', 'ul.buddy li']) {
+    for (final el in doc.querySelectorAll(selector)) {
+      // 带「加好友」按钮的不是已有好友（推荐/在线成员）。
+      if (el.querySelector('a[href*="ac=friend&op=add"]') != null) continue;
+
+      final nameLink = el.querySelector(
+              'p.tit a[href*="mod=space&uid="]') ??
+          el.querySelector('p.tit a') ??
+          el.querySelector('h4 a[href*="mod=space&uid="]') ??
+          el.querySelector('h4 a') ??
+          el.querySelector('.comiis_friend_name, .name');
+      final name = _cleanText(nameLink?.text ?? '');
+      if (name.isEmpty) continue;
+
+      var uid = 0;
+      for (final link in el.querySelectorAll('a[href]')) {
+        uid = _uidFromHref(link.attributes['href']) ?? 0;
+        if (uid > 0) break;
+      }
+      if (uid <= 0 || !seen.add(uid)) continue;
+
+      final avatarEl = el.querySelector('a.list01_limg img') ??
+          el.querySelector('dd.avt img') ??
+          el.querySelector('img');
+      final avatar =
+          avatarEl == null ? '' : _pickImageUrl(avatarEl);
+      final note = _cleanText(
+        el.querySelector('p.txt, .note, .comiis_friend_note')?.text ?? '',
+      );
+
+      items.add(FriendItem(uid: uid, username: name, avatar: avatar, note: note));
+      if (items.length >= 80) break;
+    }
+    if (items.isNotEmpty) break;
+  }
+  return items;
 }

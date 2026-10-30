@@ -131,6 +131,60 @@ class _PostContentState extends State<PostContent> {
             child: Divider(height: 1),
           ));
           break;
+        case BlockKind.table:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _table(b.tableRows!, base, theme),
+          ));
+          break;
+        case BlockKind.h1:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _header(b.runs, base, theme, FontWeight.w700, 24),
+          ));
+          break;
+        case BlockKind.h2:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _header(b.runs, base, theme, FontWeight.w700, 22),
+          ));
+          break;
+        case BlockKind.h3:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _header(b.runs, base, theme, FontWeight.w700, 20),
+          ));
+          break;
+        case BlockKind.h4:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _header(b.runs, base, theme, FontWeight.w700, 18),
+          ));
+          break;
+        case BlockKind.h5:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _header(b.runs, base, theme, FontWeight.w700, 16),
+          ));
+          break;
+        case BlockKind.h6:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _header(b.runs, base, theme, FontWeight.w700, 14),
+          ));
+          break;
+        case BlockKind.video:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _video(b.videoUrl!, theme),
+          ));
+          break;
+        case BlockKind.iframe:
+          children.add(Padding(
+            padding: const EdgeInsets.only(bottom: YuanSpace.xs),
+            child: _iframe(b.iframeUrl!, theme),
+          ));
+          break;
       }
       if (b.kind == BlockKind.quote) quoteIndex++;
     }
@@ -322,6 +376,166 @@ class _PostContentState extends State<PostContent> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _table(List<List<InlineRun>> rows, TextStyle base, ThemeData theme) {
+    final semantic = YuanSemanticColors.of(context);
+    final headerRow = rows.isNotEmpty ? rows.first : <InlineRun>[];
+    final bodyRows = rows.isNotEmpty ? rows.sublist(1) : <List<InlineRun>>[];
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      decoration: BoxDecoration(
+        color: semantic.surfaceContainer,
+        borderRadius: BorderRadius.circular(YuanRadius.xs),
+        border: Border.all(color: semantic.outlineSubtle),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columnSpacing: 16,
+          horizontalMargin: 0,
+          border: TableBorder.all(color: semantic.outlineSubtle),
+          columns: [
+            for (var i = 0; i < headerRow.length; i++)
+              DataColumn(
+                label: _tableCell(headerRow[i], base.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: semantic.textPrimary,
+                ), theme),
+              ),
+          ],
+          rows: [
+            for (final row in bodyRows)
+              DataRow(
+                cells: [
+                  for (var i = 0; i < row.length; i++)
+                    DataCell(
+                      _tableCell(row[i], base.copyWith(
+                        color: semantic.textPrimary,
+                      ), theme),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tableCell(InlineRun run, TextStyle style, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Text(run.text, style: style),
+    );
+  }
+
+  Widget _header(List<InlineRun> runs, TextStyle base, ThemeData theme, FontWeight weight, double size) {
+    final semantic = YuanSemanticColors.of(context);
+    final style = base.copyWith(
+      fontWeight: weight,
+      fontSize: size,
+      color: semantic.textPrimary,
+      height: 1.4,
+    );
+    return SelectableText.rich(
+      TextSpan(style: style, children: _spans(runs, style, theme)),
+    );
+  }
+
+  Widget _video(String url, ThemeData theme) {
+    final semantic = YuanSemanticColors.of(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.all(YuanSpace.sm),
+      decoration: BoxDecoration(
+        color: semantic.surfaceContainer,
+        borderRadius: BorderRadius.circular(YuanRadius.xs),
+        border: Border.all(color: semantic.outlineSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.play_circle_outline_rounded, size: 24, color: semantic.brandPrimary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '视频：${Uri.tryParse(url)?.host ?? url}',
+                  style: YuanType.bodySm.copyWith(color: semantic.textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _open(url),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: semantic.brandPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '打开',
+                    style: YuanType.caption.copyWith(color: semantic.brandPrimary),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iframe(String url, ThemeData theme) {
+    final semantic = YuanSemanticColors.of(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.all(YuanSpace.sm),
+      decoration: BoxDecoration(
+        color: semantic.surfaceContainer,
+        borderRadius: BorderRadius.circular(YuanRadius.xs),
+        border: Border.all(color: semantic.outlineSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.open_in_new_rounded, size: 20, color: semantic.brandPrimary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '嵌入内容：${Uri.tryParse(url)?.host ?? url}',
+                  style: YuanType.bodySm.copyWith(color: semantic.textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _open(url),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: semantic.brandPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '打开',
+                    style: YuanType.caption.copyWith(color: semantic.brandPrimary),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

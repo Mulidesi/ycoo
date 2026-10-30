@@ -32,6 +32,15 @@ Entries discovered by the Agent during task execution should follow this format:
 ## Entries
 
 [Project Knowledge Summary]
+- Date: 2026-10-29
+- Context: Discovered by Agent while implementing P15-B R3 image/attachment upload
+- Category: Environment Configuration
+- Instructions:
+  - file_picker v11.0.3 的 `PlatformFile` 有 `bytes` 字段（`Uint8List?`），但**没有** `readAsBytes()` 方法（更高版本才有）。读取文件字节需在 `FilePicker.pickFiles(type: ..., withData: true)` 时启用 `withData`，之后访问 `file.bytes`。
+  - `share_plus ^10.1.4` 与 `file_picker ^13.2.0` 在 win32 依赖上不兼容（前者 win32 ^5.5.3，后者 win32 ^6.3.0），`file_picker` 必须降级到 `^11.0.3`。
+  - `package:http/testing.dart` 的 `MockClient` 会把 `http.MultipartRequest` 转成普通 `http.Request` 传给 handler，测试中无法 cast 回 `MultipartRequest` 来访问 `fields`/`files`。验证 multipart 表单字段需用其他手段或跳过字段验证。
+
+[Project Knowledge Summary]
 - Date: 2026-10-27
 - Context: Discovered by Agent while running tests; updated from 2026-10-22 entry (environment changed)
 - Category: Environment Configuration
