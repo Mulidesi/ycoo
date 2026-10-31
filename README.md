@@ -2,13 +2,14 @@
 
 基于 Flutter 编写的 **ycoo.net（源论坛）** 第三方客户端，一套代码同时适配 **Android / iOS / Windows / macOS / Linux / Web**。
 
-针对论坛场景重做了登录、帖子阅读与版块浏览，并实现了两个特色能力：**自动签到** 与 **隐藏贴自动回复**。
+针对论坛场景重做了登录、帖子阅读与版块浏览，特色能力：**自动签到**、**隐藏贴自动回复解锁**、
+**应用内更新**，以及投票 / 打赏 / 楼中楼互动、发帖增强（表情 / 草稿 / 附件上传）、离线缓存、分享为图片等。
 
 [![Android APK](https://github.com/Mulidesi/ycoo/actions/workflows/android.yml/badge.svg)](https://github.com/Mulidesi/ycoo/actions/workflows/android.yml)
 [![Release](https://img.shields.io/github/v/release/Mulidesi/ycoo?label=release&color=blue)](https://github.com/Mulidesi/ycoo/releases)
 [![Flutter](https://img.shields.io/badge/Flutter-3.41.9-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.11.5-0175C2?logo=dart&logoColor=white)](https://dart.dev)
-[![minSdk](https://img.shields.io/badge/Android-minSdk%2021-brightgreen)](https://developer.android.com)
+[![minSdk](https://img.shields.io/badge/Android-minSdk%2024-brightgreen)](https://developer.android.com)
 
 ---
 
@@ -66,9 +67,16 @@
 | 帖子详情  | `GET thread-{tid}-{page}-1.html`                                                                 | 解析 `div[id^=post_]`、`#postmessage_*`、`div.locked`                                         |
 | 发帖页   | `GET forum.php?mod=post&action=newthread&fid={fid}`                                               | 解析 `form#postform` 的 action、`formhash`、`posttime`、`typeid` 分类                            |
 | 发帖    | `POST` 发帖页 action + `&inajax=1`                                                                 | `formhash` `posttime` `subject` `message` `typeid` `usesig=1` `wysiwyg=0`                    |
-| 回复    | 按页面 `form#fastpostform` 的 action 原样提交 + `&inajax=1`                                              | `formhash` `message` `subject` `usesig` `posttime`                                        |
+| 回复    | 按页面 `form#fastpostform` 的 action 原样提交 + `&inajax=1`                                              | `formhash` `message` `usesig` `posttime`（站点时间戳优先，不发 `subject`）                            |
+| 编辑回复  | `GET` 编辑页 → `POST` `action=edit&editsubmit=yes&inajax=1`                                         | `formhash` `posttime` `subject` `message`（编辑页隐藏字段原样回传）                                    |
+| 删除回复  | `GET` 编辑页 → `POST` `action=edit&editsubmit=yes&delete=1&inajax=1`                                | 直接 GET `delete=1` **不执行删除**（v1.1.10 修复）                                                   |
+| 附件上传  | `POST misc.php?mod=swfupload&operation=upload&type=image&inajax=yes`（multipart）                  | `uid` `hash`（发帖页 `uploadhash` 凭证），返回 `DISCUZUPLOAD\|aid\|status\|size`                    |
+| 点赞    | `GET a[href*="action=recommend&do=add"]` + `&inajax=1`                                           | 成功无 `succeedhandle_`，只有 `errorhandle_recommend` + 计数节点                                    |
+| 收藏    | `POST home.php?mod=spacecp&ac=favorite&type=thread&id={tid}`                                     | `formhash`                                                                                |
+| 关注/取关 | `GET home.php?mod=spaceac=friend`…（入口链接带 `formhash`）                                             | 解析帖子页 / 空间页的关注入口与当前状态                                                                     |
 | 签到状态  | `GET k_misign-sign.html`                                                                         | 已签到标记：`.btnvisted` + 「您的签到排名」                                                             |
 | 执行签到  | `POST plugin.php?id=k_misign:sign&operation=qiandao&format=button&formhash=xx`                   | 返回 `签到成功` / `今日已签`                                                                        |
+| 移动端接口 | `GET api/mobile/index.php?version=4&module=…`                                                    | `forumdisplay`（列表首图/摘要）、`profile`（积分/统计）；不要吸收其 Set-Cookie                                 |
 
 ### 5. 内容与权限模型
 
@@ -124,21 +132,31 @@ ycoo_client/                # 工程根目录（App 代码都在这里）
 │   ├── main.dart                启动：加载状态后注入 Provider
 │   ├── app.dart                 MaterialApp + 启动闸门（启动页/登录/主框架）
 │   ├── core/
-│   │   ├── discuz_client.dart   带 Cookie 持久化的 HTTP 客户端
+│   │   ├── discuz_client.dart   带 Cookie 持久化的 HTTP 客户端（按 host 分桶）
+│   │   ├── error/               AppException：网络层统一错误，UI 展示 displayMessage
+│   │   ├── network/             站点配置（ycoo 主站 / pc.sysbbs.com 备用域名）
+│   │   ├── persistence/         CookieStore（name→value 表 + 持久化）
+│   │   ├── session/             会话恢复 / 登录状态
+│   │   ├── services/            业务服务层：回复、签到、切站编排、离线缓存、下载
+│   │   ├── automation/          自动回复引擎（纯逻辑）+ 后台签到
+│   │   ├── share/               分享为图片（Canvas 渲染 + share_plus）
 │   │   └── image_loader.dart    图片加载器（Cookie / 防盗链降级 / 失败原因）
 │   ├── data/
 │   │   ├── parsers.dart         纯 Dart HTML 解析（可离线回归）
 │   │   ├── content.dart         正文 HTML → 内容块（无损，可离线回归）
 │   │   ├── previews.dart        移动端接口 → 列表首图 / 摘要（纯解析）
-│   │   └── forum_api.dart       全部站点接口
-│   ├── models/models.dart       Board / ThreadItem / Post / UserProfile / SignStatus ...
+│   │   └── forum_api.dart       全部站点接口（回帖/发帖/删除含 503 重试与灌水等待）
+│   ├── models/models.dart       Board / ThreadItem / Post / UserProfile / ReplyResult ...
 │   ├── state/
-│   │   ├── app_state.dart       登录态、设置、签到、自动回复配额
+│   │   ├── app_state.dart       状态编排（≤300 行，业务下沉到 services）
+│   │   ├── settings_model.dart  设置模型（自动回复预设含默认值回落）
 │   │   └── preview_store.dart   列表预览缓存 + 节流请求
 │   └── ui/
-│       ├── theme.dart           Material 3 主题（亮/暗）
-│       ├── widgets/             正文渲染器、帖子行、通用组件
-│       └── pages/               登录 / 首页 / 版块 / 帖子列表 / 帖子详情 / 签到 / 我的 / 搜索
+│       ├── theme.dart           Material 3 主题（亮/暗，动态取色）
+│       ├── widgets/             正文渲染器、帖子行、玻璃回复栏、通用组件
+│       └── pages/               登录 / 首页 / 版块 / 帖子列表 / 帖子详情 / 发帖 / 签到 /
+│                               我的 / 搜索 / 用户空间 / 关注列表 / 离线缓存 / 下载历史 /
+│                               站点设置 / 应用内更新 / 图片诊断
 └── tool/                        离线回归脚本（配合 ../recon 抓取样本）
 ```
 
@@ -150,6 +168,9 @@ ycoo_client/                # 工程根目录（App 代码都在这里）
 - **正文渲染**：把帖子 HTML 拆成 段落 / 图片 / 引用 / 代码块 四类块，段落内保留加粗、斜体、下划线、颜色、字号与超链接；链接可点击跳转，图片点击进入可缩放预览，并带 `Referer` 头绕过防盗链。
 - **多端适配**：宽度 ≥ 900 自动切换 `NavigationRail` 侧栏布局（PC/平板），窄屏使用底部导航（手机）；内容区最大宽度受控，避免 PC 上过宽。
 - **液态玻璃**：底栏与详情页回复栏由 `liquid_glass_widgets` 渲染（磨砂 6 / 厚度 24），Shader 不可用时自动退回磨砂；底栏选中态只用高亮色，不画背景块。
+- **服务层拆分**（P12）：`AppState` 只做状态编排（≤300 行），业务下沉到 `core/services/`（回复 / 签到 / 切站编排 / 离线缓存 / 下载）；站点配置独立在 `core/network/`。
+- **双域名切换**：ycoo 主站与备用域名走同一套解析层；切站时 `SiteManager` 编排清理旧 Cookie / 会话 / 图片缓存，并同步 `client.baseUrl` 与解析器基址（v1.1.10 修复只更新一半的缺陷）。
+- **回帖链路加固**（P15-H，v1.1.10）：`posttime` 优先用页面嵌入的站点时间戳（设备时钟偏差免疫）；表单校验失败（HTTP 503「System Error」）自动换新令牌重试；灌水控制（间隔 5 秒）等待后重试一次；网络异常包装为友好提示，UI 层不再卡死。
 - **自动签到**：启动、回到前台、手动触发三个时机；按自然日去重，先查状态再签到，失败不影响启动。
 - **隐藏贴自动回复**：仅在用户**真正打开**隐藏贴时触发，随机延时 2.2–6 秒，按 tid 去重、按自然日限额（默认 20 条/天）、支持版块白名单，避免批量刷帖。
 
@@ -157,17 +178,21 @@ ycoo_client/                # 工程根目录（App 代码都在这里）
 
 | 模块   | 能力                                        |
 | ---- | ----------------------------------------- |
-| 登录   | 账号/UID/邮箱、安全提问、记住密码、登录失败提示剩余次数、Cookie 免登录 |
-| 首页   | 最新发表 / 热门 / 回复 / 精华 四个信息流，下拉刷新 + 触底加载；再点底栏「首页」刷新当前信息流 |
+| 登录   | 账号/UID/邮箱、安全提问、记住密码、登录失败提示剩余次数、Cookie 免登录、双域名切换 |
+| 首页   | 最新发表 / 热门 / 回复 / 精华 四个信息流，下拉刷新 + 触底加载 + 骨架屏；再点底栏「首页」刷新当前信息流 |
 | 版块   | 分组折叠式浏览、今日新增、主题/帖数、私密标识、搜索入口              |
-| 帖子列表 | 置顶/分类标签、附件标识、作者与回复/查看数、分页加载               |
-| 帖子阅读 | 富文本渲染、图片预览、楼层列表、楼层跳页、复制正文/链接、浏览器打开；底部玻璃回复栏支持点赞/收藏/分享 |
-| 发帖   | 选版块与主题分类、标题/正文编辑、Discuz BBCode、审核状态提示、发布后直达新主题          |
-| 过滤   | 按标题关键词隐藏帖子，默认过滤「打卡」，可在「我的」中增删关键词或关闭 |
-| 隐藏内容 | 回复可见/购买可见/登录可见 分类提示；自动回复解锁                |
+| 帖子列表 | 置顶/分类标签、附件标识、首图与摘要预览、作者与回复/查看数、分页加载、标题关键词过滤 |
+| 帖子阅读 | 富文本渲染、图片预览、楼层列表、楼层跳页、等级徽章、复制正文/链接、浏览器打开、离线缓存；底部玻璃回复栏支持点赞/收藏/分享/回复 |
+| 互动   | 投票参与、打赏（评分）弹层与记录、楼中楼点评、帖子等级徽章、关注/取关、用户空间与我的帖子 |
+| 回复   | 富文本编辑、表情面板（三套）、草稿自动保存、@好友、图片附件上传、高级选项（仅楼主可见/阅读权限/售价/倒序/邮件通知/签名）、编辑与删除自己的回复 |
+| 发帖   | 选版块与主题分类、标题/正文编辑、Discuz BBCode、审核状态提示、发布后直达新主题、灌水控制自动等待重试 |
+| 隐藏内容 | 回复可见/购买可见/登录可见 分类提示；自动回复解锁；付费主题应用内购买（星币） |
+| 分享   | 系统分享面板、分享为图片（Canvas 渲染正文，含内嵌图片）           |
 | 签到   | 状态、连续天数、今日人数、排名、奖励、自动签到开关                 |
-| 我的   | 头像/用户组/积分/主题/回帖/好友、自动回复内容与限额、清除记录、退出登录    |
-| 搜索   | 关键词搜索帖子（需站点允许）                            |
+| 离线   | 帖子离线缓存阅读、附件/图片下载管理、下载历史                   |
+| 我的   | 头像/用户组/积分/主题/回帖/好友、自动回复内容与限额、关键词过滤、站点设置、应用内更新、图片诊断、清除记录、退出登录 |
+| 搜索   | 关键词搜索帖子 + 版块/时间范围/排序筛选（需站点允许）             |
+| 更新   | 应用内检查更新，按设备 ABI 选择 APK，size/sha256 校验，加速线路优先 |
 
 ---
 
@@ -286,6 +311,13 @@ flutter test test/automation_presets_test.dart  # 自动回复预设初始化 / 
 flutter test test/bottom_bar_inset_test.dart    # 悬浮底栏占位高度与列表底部留白
 flutter test test/thread_actions_test.dart      # 点赞/收藏入口解析与 inajax 响应
 flutter test test/glass_reply_bar_test.dart     # 收起/展开、发布、点赞收藏状态
+flutter test test/reply_resilience_test.dart    # 回帖 503 重试 / 灌水等待 / posttime / 异常包装
+flutter test test/new_thread_test.dart          # 发帖表单 / comiis 成功回调解析
+flutter test test/post_interaction_test.dart    # 投票 / 打赏 / 楼中楼 / 编辑删除 / 上传
+flutter test test/hidden_thread_test.dart       # 隐藏贴 / 付费贴判定与解锁
+flutter test test/offline_cache_test.dart       # 离线缓存读写
+flutter test test/search_filter_test.dart       # 搜索筛选
+flutter test test/post_filter_test.dart         # 标题关键词过滤
 flutter test test/preview_home.dart --update-goldens   # 底栏 + 列表版式预览 PNG
 flutter test --update-goldens test/golden_preview_test.dart  # 生成版式预览 PNG
 ```
