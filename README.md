@@ -215,7 +215,11 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.1.8-arm64-v8a.apk` | 当前最新（[v1.1.8](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.8)，帖子互动增强+发帖增强+离线缓存+HTML渲染器+UX细节；versionCode 29，minSdk 24） |
+| GitHub Release | `ycoo-client-1.1.10-arm64-v8a.apk` | 当前最新（[v1.1.10](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.10)，回帖/发帖 503 表单校验失败重试 + 灌水等待重试 + 删除改表单提交 + 切站 baseUrl 同步；versionCode 31，minSdk 24） |
+| GitHub Release | `ycoo-client-1.1.10-armeabi-v7a.apk` | 同上，32 位 ARM |
+| GitHub Release | `ycoo-client-1.1.10-x86_64.apk` | 同上，x86_64 模拟器/平板 |
+| GitHub Release | `ycoo-client-1.1.9-arm64-v8a.apk` | [v1.1.9](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.9)（回帖「来路不正确」初步重试，未覆盖 503 场景；versionCode 30） |
+| GitHub Release | `ycoo-client-1.1.8-arm64-v8a.apk` | v1.1.8（帖子互动增强+发帖增强+离线缓存+HTML渲染器+UX细节；versionCode 29，minSdk 24） |
 | GitHub Release | `ycoo-client-1.1.8-armeabi-v7a.apk` | 同上，32 位 ARM |
 | GitHub Release | `ycoo-client-1.1.8-x86_64.apk` | 同上，x86_64 模拟器/平板 |
 | GitHub Release | `ycoo-client-1.1.7-arm64-v8a.apk` | v1.1.7（帖子正文分享为图片；versionCode 28） |
@@ -428,7 +432,30 @@ GET api/mobile/index.php?version=4&module=forumdisplay&fid={fid}&page={page}
 
 ---
 
-## 八、已知限制
+## 八、回帖失败修复与发帖/删除实测（v1.1.9 之后）
+
+用户反馈 v1.1.9 仍无法回帖（自动 + 手动均报错）。用测试账号对 ycoo.net 实机探测后确认根因：
+
+| 场景 | 站点实际行为 | v1.1.9 客户端的问题 |
+| --- | --- | --- |
+| formhash 校验失败 | **HTTP 503** + 「Discuz! System Error / 非法字符」页（正文没有「来路不正确」文案） | `DiscuzClient.post` 在解析响应前就抛异常，v1.1.9 加的 submit_invalid 重试（只看 200 响应体）永远执行不到；手动回帖 UI 没有 try/catch，直接卡死 |
+| 两次发帖间隔 < 5 秒 | HTTP 200 + 「抱歉，您两次发表间隔少于 5 秒」 | 被当普通失败直接返回 |
+| 删除自己的帖子 | 直接 GET `action=edit&delete=1` 只返回编辑页，**删除不执行** | 删除功能实际无效 |
+| 发帖成功回调 | comiis 模板返回空后缀 `succeedhandle_('thread-<tid>-1-1.html', …)` | 解析器只认 `succeedhandle_newthread/post`，发帖成功被误判失败 |
+
+修复（详见 `TODO.md` P15-H）：
+
+- `DiscuzClient.post` 新增 `checkStatus` 参数；回帖/发帖关闭状态映射，自行解析 503 错误体；
+- `reply()`：posttime 优先用页面里嵌入的**站点时间戳**（设备时钟偏差免疫）；503「非法字符」/来路不正确换新令牌重试；灌水控制等待 6 秒重试一次；网络异常包装为友好 `ReplyResult`；`manualReply` / 详情页 `_sendReply` 全面 try/catch；
+- `postNewThread()` 同样支持 503 重试与灌水等待；`parseNewThreadResult` 兼容空后缀回调、`thread-<tid>-` 地址与「已发布」文案；
+- `deletePost()` 改为编辑页表单提交（GET 编辑页 → POST `editsubmit=yes&delete=1`）；
+- `switchSite` / `AppState.init` 同步 `client.baseUrl`（此前只更新解析器，双域名切换后半失效）。
+
+**实机验证**（测试账号）：回帖成功（含紧跟第二帖触发灌水重试、7.6 秒后成功）；发帖 → 成功判定含 tid → 删除 全闭环成功；`flutter test` 244 全过。
+
+---
+
+## 九、已知限制
 
 1. **Web 端受浏览器 CORS 限制**：ycoo.net 未返回 `Access-Control-Allow-Origin`，浏览器直连会被拦截；同时浏览器禁止脚本设置 `Cookie` 头，登录态无法在 Web 端保持。**Android / iOS / 桌面端不受影响**。
 2. **验证码**：若站点对低等级账号开启发帖验证码，自动回复会失败并提示「请到网页端回复一次」。
@@ -444,6 +471,6 @@ GET api/mobile/index.php?version=4&module=forumdisplay&fid={fid}&page={page}
 | `TODO.md` | 任务清单与版本进度 |
 | `README.md` | 本文件：站点分析、接口封装、构建与实测记录 |
 
-## 九、合规说明
+## 十、合规说明
 
 本项目为第三方客户端，与源论坛官方无关。账号密码仅用于直连 `ycoo.net` 登录，保存在本机，不上传任何第三方服务器。自动签到与自动回复作用于**使用者本人的账号**，请遵守论坛版规，合理设置每日限额，避免灌水。

@@ -367,6 +367,26 @@
 - 新增依赖：`share_plus ^10.1.4`；Android `queries` 补 `SEND`（image/png + text/plain），`file_paths.xml` 补分享路径（cache/files/external Download）
 - 验证：`flutter analyze` 0 issue；`flutter test` 171 过 + 1 跳过（缺 recon 样本）
 
+### P15-H 回帖/发帖/删除链路加固（已完成，2026-10-31 实机验证）
+
+> 来源：用户反馈 v1.1.9 无法回帖（自动 + 手动均报错）。
+> 实机探测（ycoo.net，Discuz! X3.5 + comiis 模板）确认根因：
+>   * formhash 校验失败 → 站点返回 **HTTP 503 + 「System Error / 非法字符」页**，
+>     正文没有「来路不正确」文案；`DiscuzClient.post` 在解析前就抛 `AppException`，
+>     v1.1.9 的 submit_invalid 重试逻辑（只处理 200 响应体）永远执行不到，
+>     且 `ReplyService.manualReply` / 详情页 `_sendReply` 无 try/catch，手动回帖直接卡死。
+>   * 灌水控制（floodctrl=5）→ HTTP 200 错误文案，被当普通失败返回。
+>   * 删除帖子：直接 GET `action=edit&delete=1` 不执行删除，必须 POST 编辑页表单。
+
+- [x] R1 `DiscuzClient.post` 增加 `checkStatus` 参数：回帖/发帖调用关闭状态映射，自行解析 503 错误体
+- [x] R2 `ForumApi.reply`：posttime 优先用页面嵌入的站点时间戳（设备时钟偏差免疫）；503「非法字符」/来路不正确 → 换新令牌重试；灌水控制等待 6s 重试一次；网络异常包装为可读 `ReplyResult`
+- [x] R3 `ReplyService.manualReply` / 详情页 `_sendReply` 全面 try/catch：异常转友好提示，不再卡 `_sending`
+- [x] R4 `ForumApi.postNewThread`：同样的 503 重试（重取表单）与灌水等待；`parseNewThreadResult` 兼容 comiis 模板空后缀 `succeedhandle_` 回调、`thread-<tid>-` Rewrite 地址与「已发布」文案（此前发帖成功被误判失败）
+- [x] R5 `ForumApi.deletePost` 改为编辑页表单提交（GET `editsubmit` 编辑页 → POST `delete=1`），实机删除成功
+- [x] R6 `SiteManager.switchSite` / `AppState.init` 同步 `client.baseUrl`（此前只更新解析器，双域名切换后半失效）
+- [x] R7 测试：新增 `reply_resilience_test`（8 例：503 重试/非法字符/灌水/posttime/网络异常/登录页）+ `post_interaction_test` deletePost 用例重写 + `new_thread_test` comiis 回调用例；`flutter analyze` 0 issue（不含临时脚本）；`flutter test` 244 全过
+- 验证（测试账号 uid 31981）：回帖成功（含紧跟第二帖触发灌水重试 7.6s 成功）；发帖 → 判定成功含 tid → 删除 全闭环成功
+
 ### 完成边界
 - P15-A R1-R3 完成 = 投票卡片+提交、打赏弹层+记录、楼中楼点评（解析+交互）+ `post_interaction_test` 17 例 + analyze 0 issue
 - P15-A 完成 = 投票/打赏/楼中楼/举报/编辑删除全部落地 + analyze 0 issue + 新增测试
@@ -375,6 +395,7 @@
 - P15-D 完成 = HTML 渲染器扩展 + analyze 0 issue + 新增测试
 - P15-E 完成 = 楼层标签/卡片差异化/评论区分隔/回复提示条 + analyze 0 issue + 全量测试全过
 - P15-F 完成 = 分享为图片入口 + 渲染/保存/系统分享 + analyze 0 issue + 新增测试
+- P15-H 完成 = 回帖/发帖 503 表单校验失败重试 + 灌水等待重试 + 服务端 posttime + 删除改表单提交 + 切站 baseUrl 同步 + analyze 0 issue + 244 测试全过 + 实机闭环验证
 
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
