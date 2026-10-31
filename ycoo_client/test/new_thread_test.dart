@@ -102,6 +102,19 @@ void main() {
       expect(res.message, contains('审核'));
     });
 
+    test('comiis 模板：空后缀回调 + Rewrite 地址 + 已发布文案', () {
+      const body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+          '<root><![CDATA[<script type="text/javascript" reload="1">'
+          "if(typeof succeedhandle_=='function') {succeedhandle_("
+          "'thread-160385-1-1.html', '非常感谢，您的主题已发布，现在将转入主题页，"
+          "请稍候……[ 点击这里转入主题列表 ]', {'fid':'2','tid':'160385',"
+          "'pid':'3027956'});}</script>]]></root>";
+      final res = parseNewThreadResult(body);
+      expect(res.success, isTrue);
+      expect(res.tid, 160385);
+      expect(res.pending, isFalse);
+    });
+
     test('验证码 / 登录失效透传', () {
       final captcha = parseNewThreadResult(
         "<root><![CDATA[<script>errorhandle_newthread('抱歉，请输入验证码');</script>]]></root>",

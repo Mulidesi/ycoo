@@ -7,6 +7,7 @@ library;
 import 'dart:math' as math;
 
 import '../core/discuz_client.dart';
+import '../core/error/app_exception.dart';
 import '../models/models.dart';
 import 'parsers.dart';
 
@@ -250,19 +251,30 @@ class ForumApi {
     r'(来路不正确|表单验证串不符|submit_invalid)',
   );
 
+  /// Discuz 的灌水控制（floodctrl）文案，响应状态为 200。
+  static final RegExp _floodRe = RegExp(r'(间隔少于|灌水|请稍候再发表)');
+
+  /// 灌水控制的固定间隔：站点 floodctrl 为 5 秒，多留 1 秒余量。
+  Duration floodWait = const Duration(seconds: 6);
+
   Future<ReplyResult> reply({
     required int tid,
     required int fid,
     required String message,
     String? formhash,
   }) async {
-    // 「来路不正确」通常是令牌竞态：取页面到提交之间会话/令牌失效（或
-    // 设备时钟快于站点触发 posttime 校验）。重试一次，取新页面 + 新令牌。
-    for (var attempt = 0; attempt < 2; attempt++) {
-      final page = await client.get(
-        'thread-$tid-1-1.html',
-        referer: '$kBaseUrl/forum.php',
-      );
+    // 最多 3 轮：令牌竞态立即换新页面重试；灌水控制等待后再试一次。
+    var floodRetried = false;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final DResponse page;
+      try {
+        page = await client.get(
+          'thread-$tid-1-1.html',
+          referer: '$kBaseUrl/forum.php',
+        );
+      } on AppException catch (e) {
+        return ReplyResult(success: false, message: _replyNetworkMessage(e));
+      }
       if (looksLoggedOut(page.body)) {
         return const ReplyResult(success: false, message: '登录状态已失效，请重新登录');
       }
@@ -285,14 +297,26 @@ class ForumApi {
           : '$baseAction&inajax=1';
 
       // Discuz 的 formhash + posttime 双重校验：
-      //   * posttime 必须接近站点时间戳，设备时钟快于站点会触发校验失败；
+      //   * posttime 优先用页面里嵌入的服务端时间戳（表单隐藏字段），
+      //     设备时钟偏差就不会触发校验失败；页面缺失时退回设备时间；
       //   * 回复不需要 subject，多传会让站点走到校验分支。
-      final r = await client.post(url, {
-        'formhash': fh,
-        'message': message,
-        'usesig': '1',
-        'posttime': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
-      }, referer: '$kBaseUrl/thread-$tid-1-1.html');
+      final posttime =
+          int.tryParse(form?.posttime ?? '') ??
+          DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      // 表单校验失败（来路不正确）时站点返回 503 + 错误正文，
+      // checkStatus 关掉状态映射，让下面的文案解析接管。
+      final DResponse r;
+      try {
+        r = await client.post(url, {
+          'formhash': fh,
+          'message': message,
+          'usesig': '1',
+          'posttime': '$posttime',
+        }, referer: '$kBaseUrl/thread-$tid-1-1.html', checkStatus: false);
+      } on AppException catch (e) {
+        return ReplyResult(success: false, message: _replyNetworkMessage(e));
+      }
 
       final msg = parseAjaxMessage(r.body);
       final ok =
@@ -312,10 +336,35 @@ class ForumApi {
         );
       }
 
-      if (_submitInvalidRe.hasMatch(msg) ||
-          _submitInvalidRe.hasMatch(r.body)) {
+      if (_floodRe.hasMatch(msg)) {
+        // 灌水控制：与上一帖间隔过短，等待后重试一次。
+        if (!floodRetried) {
+          floodRetried = true;
+          await Future<void>.delayed(floodWait);
+          continue;
+        }
+        return const ReplyResult(
+          success: false,
+          message: '发帖太快了，站点要求间隔几秒，请稍候再试',
+        );
+      }
+
+      // Discuz X3.5 对表单校验失败（formhash 不符 / 非法字符）返回
+      // HTTP 503 + 「System Error」页，正文没有「来路不正确」文案；
+      // 状态码本身就是重试信号，与 200 响应里的文案一起判定。
+      final invalid =
+          r.statusCode == 503 ||
+          _submitInvalidRe.hasMatch(msg) ||
+          _submitInvalidRe.hasMatch(r.body);
+      if (invalid) {
         // 令牌/会话竞态：换新页面 + 新令牌重试一次；再失败给明确文案。
-        if (attempt == 0) continue;
+        if (attempt < 2) continue;
+        if (r.body.contains('非法字符')) {
+          return const ReplyResult(
+            success: false,
+            message: '站点拒绝了这个回复内容，请修改后重试',
+          );
+        }
         return const ReplyResult(
           success: false,
           message: '回复状态已过期，请下拉刷新页面后重试',
@@ -335,10 +384,20 @@ class ForumApi {
       }
       return ReplyResult(
         success: false,
-        message: msg.isEmpty ? '回复失败，站点未返回提示，请稍后重试' : msg,
+        message: msg.isNotEmpty
+            ? msg
+            : r.statusCode >= 400
+                ? '回复失败（HTTP ${r.statusCode}），请稍后重试'
+                : '回复失败，站点未返回提示，请稍后重试',
       );
     }
     return const ReplyResult(success: false, message: '回复失败，请稍后重试');
+  }
+
+  String _replyNetworkMessage(AppException e) {
+    final m = e.message;
+    if (m != null && m.isNotEmpty && m.length < 80) return '网络异常：$m';
+    return e.displayMessage;
   }
 
   // ---------------------------------------------------------------- 点赞 / 收藏
@@ -589,21 +648,51 @@ class ForumApi {
     return msg.isEmpty ? '编辑成功' : _shorten(msg);
   }
 
-  /// 删除自己的帖子 / 回复（Discuz 用 `action=edit&delete=1`）。
+  /// 删除自己的帖子 / 回复。
+  ///
+  /// 站点要求先取编辑页再 POST `editsubmit=yes` 表单（`delete=1`），
+  /// 直接 GET `delete=1` 只会返回编辑页，删除并不执行。
   Future<String> deletePost({
     required int tid,
     required int fid,
     required int pid,
     required String formhash,
   }) async {
-    if (formhash.isEmpty) throw ForumException('删除凭证已失效，请下拉刷新后重试');
-    final r = await client.get(
-      'forum.php?mod=post&action=edit&tid=$tid&fid=$fid&pid=$pid'
-      '&delete=1&formhash=$formhash&mobile=2',
+    final edit = await client.get(
+      'forum.php?mod=post&action=edit&tid=$tid&pid=$pid&mobile=2',
       referer: '$kBaseUrl/thread-$tid-1-1.html',
     );
+    if (looksLoggedOut(edit.body)) {
+      throw ForumException('登录状态已失效，请重新登录');
+    }
+    String? hidden(String name) => RegExp(
+          'name="$name"[^>]*value="([^"]*)"',
+        ).firstMatch(edit.body)?.group(1);
+    final fh = hidden('formhash') ?? formhash;
+    if (fh.isEmpty) throw ForumException('删除凭证已失效，请下拉刷新后重试');
+    final posttime = hidden('posttime') ?? '';
+    final r = await client.post(
+      'forum.php?mod=post&action=edit&extra=&editsubmit=yes&inajax=1',
+      {
+        'formhash': fh,
+        if (posttime.isNotEmpty) 'posttime': posttime,
+        'fid': '$fid',
+        'tid': '$tid',
+        'pid': '$pid',
+        'delete': '1',
+        'subject': hidden('subject') ?? '',
+        'message': '',
+        'usesig': '1',
+        'wysiwyg': '0',
+        'save': '',
+      },
+      referer: '$kBaseUrl/forum.php?mod=post&action=edit&tid=$tid&pid=$pid',
+    );
     final msg = parseAjaxMessage(r.body);
-    if (_looksLikeError(msg)) throw ForumException(_shorten(msg));
+    final ok = r.body.contains('succeedhandle_') ||
+        msg.contains('删除成功') ||
+        msg.contains('已删除');
+    if (!ok) throw ForumException(_shorten(msg.isEmpty ? '删除失败，请稍后重试' : msg));
     return msg.isEmpty ? '已删除' : _shorten(msg);
   }
 
@@ -662,41 +751,94 @@ class ForumApi {
       return const NewThreadResult(success: false, message: '请填写正文');
     }
 
-    final form = await newThreadForm(fid);
+    var form = await newThreadForm(fid);
     if (!form.canPost) {
       return NewThreadResult(
         success: false,
         message: form.notice ?? '当前账号在该版块没有发帖权限',
       );
     }
-    final fh = form.formhash;
-    if (fh == null || fh.isEmpty) {
+    if ((form.formhash ?? '').isEmpty) {
       return const NewThreadResult(success: false, message: '无法获取发帖令牌，请刷新后重试');
     }
 
-    final baseAction =
-        form.action ??
-        'forum.php?mod=post&action=newthread&fid=$fid&extra=&topicsubmit=yes';
-    final url = baseAction.contains('inajax=')
-        ? baseAction
-        : '$baseAction&inajax=1';
+    var floodRetried = false;
+    var invalidRetried = false;
+    while (true) {
+      if (invalidRetried) {
+        // 换新表单（新 formhash / posttime）再试一次
+        final fresh = await newThreadForm(fid);
+        if (!fresh.canPost || (fresh.formhash ?? '').isEmpty) {
+          return NewThreadResult(
+            success: false,
+            message: fresh.notice ?? '发帖状态已过期，请刷新后重试',
+          );
+        }
+        form = fresh;
+      }
+      final fh = form.formhash!;
+      final baseAction = form.action ??
+          'forum.php?mod=post&action=newthread&fid=$fid&extra=&topicsubmit=yes';
+      final url = baseAction.contains('inajax=')
+          ? baseAction
+          : '$baseAction&inajax=1';
 
-    final r = await client.post(url, {
-      'formhash': fh,
-      if (form.posttime != null) 'posttime': form.posttime!,
-      'subject': title,
-      'message': message,
-      'typeid': '${typeId ?? 0}',
-      'usesig': useSignature ? '1' : '0',
-      'wysiwyg': '0',
-      'save': '',
-      if (replyOnly) 'replyonly': '1',
-      if (orderDesc) 'ordertype': '1',
-      if (notify) 'emailnotify': '1',
-      if (readPerm.isNotEmpty && readPerm != '0') 'readperm': readPerm,
-      if (price.isNotEmpty && price != '0') 'price': price,
-    }, referer: '$kBaseUrl/forum.php?mod=post&action=newthread&fid=$fid');
-    return parseNewThreadResult(r.body);
+      final DResponse r;
+      try {
+        r = await client.post(url, {
+          'formhash': fh,
+          if (form.posttime != null) 'posttime': form.posttime!,
+          'subject': title,
+          'message': message,
+          'typeid': '${typeId ?? 0}',
+          'usesig': useSignature ? '1' : '0',
+          'wysiwyg': '0',
+          'save': '',
+          if (replyOnly) 'replyonly': '1',
+          if (orderDesc) 'ordertype': '1',
+          if (notify) 'emailnotify': '1',
+          if (readPerm.isNotEmpty && readPerm != '0') 'readperm': readPerm,
+          if (price.isNotEmpty && price != '0') 'price': price,
+        }, referer: '$kBaseUrl/forum.php?mod=post&action=newthread&fid=$fid',
+            checkStatus: false);
+      } on AppException catch (e) {
+        return NewThreadResult(
+          success: false,
+          message: e.displayMessage,
+        );
+      }
+
+      final res = parseNewThreadResult(r.body);
+      if (res.success) return res;
+
+      final msg = res.message;
+      if (_floodRe.hasMatch(msg)) {
+        if (!floodRetried) {
+          floodRetried = true;
+          await Future<void>.delayed(floodWait);
+          continue;
+        }
+        return const NewThreadResult(
+          success: false,
+          message: '发帖太快了，站点要求间隔几秒，请稍候再试',
+        );
+      }
+      final invalid =
+          r.statusCode == 503 ||
+          _submitInvalidRe.hasMatch(msg) ||
+          _submitInvalidRe.hasMatch(r.body);
+      if (invalid && !invalidRetried) {
+        invalidRetried = true;
+        continue;
+      }
+      if (invalid && r.body.contains('非法字符')) {
+        return const NewThreadResult(
+          success: false,
+          message: '站点拒绝了这个主题内容，请修改后重试',
+        );
+      }
+      return res;
+    }
   }
 
   /// 上传附件到 Discuz。

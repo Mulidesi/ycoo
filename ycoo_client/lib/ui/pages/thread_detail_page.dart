@@ -198,7 +198,15 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
     final d = _detail;
     if (text.isEmpty || d == null) return;
     setState(() => _sending = true);
-    final res = await context.read<AppState>().manualReply(d, text);
+    ReplyResult res;
+    try {
+      res = await context.read<AppState>().manualReply(d, text);
+    } catch (e) {
+      res = ReplyResult(
+        success: false,
+        message: e is AppException ? e.displayMessage : '回复失败，网络异常，请重试',
+      );
+    }
     if (!mounted) return;
     setState(() => _sending = false);
     if (res.success) {

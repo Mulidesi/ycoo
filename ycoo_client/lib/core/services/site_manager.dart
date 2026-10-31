@@ -33,6 +33,7 @@ class SiteManager {
     final target = ForumSite.byId(siteId);
     if (target.id == currentSiteId) return target.origin;
     setBaseUrl(target.origin);
+    client.baseUrl = target.origin;
     client.clearCookies();
     await repo.clearCookies();
     session.user = null;

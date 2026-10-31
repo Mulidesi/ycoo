@@ -205,11 +205,15 @@ class DiscuzClient {
     }
   }
 
+  /// [checkStatus] 为 false 时不抛状态码异常（403/5xx 等），
+  /// 交由调用方读取错误响应体自行判定——Discuz 的表单校验失败
+  /// （如「来路不正确」）以 503 状态返回正文，需要解析而非抛错。
   Future<DResponse> post(
     String path,
     Map<String, String> body, {
     String? referer,
     bool ajax = true,
+    bool checkStatus = true,
   }) async {
     final uri = Uri.parse(path.startsWith('http') ? path : '$baseUrl/$path');
     try {
@@ -220,7 +224,7 @@ class DiscuzClient {
         body: body,
       );
       _absorb(r);
-      _throwIfMapped(r.statusCode);
+      if (checkStatus) _throwIfMapped(r.statusCode);
       return DResponse(r.statusCode, _decode(r), r.request?.url ?? uri);
     } on AppException {
       rethrow;

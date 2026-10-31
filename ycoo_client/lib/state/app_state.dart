@@ -94,6 +94,7 @@ class AppState extends ChangeNotifier {
       } catch (_) {}
     }
     setBaseUrl(site.origin);
+    client.baseUrl = site.origin;
     _clipboardSeen = _repo.getClipboardSeen();
     _session = SessionService(
       client: client, repo: _repo, onChange: notifyListeners);

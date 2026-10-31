@@ -367,18 +367,46 @@ void main() {
       );
     });
 
-    test('deletePost GET 请求带 delete=1 并返回成功', () async {
-      var url = '';
+    test('deletePost 先取编辑页再 POST editsubmit 提交 delete=1', () async {
+      final urls = <String>[];
+      Map<String, String>? body;
       final api = _api((r) {
-        url = r.url.toString();
-        return _xml("succeedhandle_('url', '已删除', {})");
+        urls.add(r.url.toString());
+        if (r.method == 'GET') {
+          return http.Response(
+            '<html><body>'
+            '<input type="hidden" name="formhash" value="ef901234">'
+            '<input type="hidden" name="posttime" value="1790000009">'
+            '<input type="hidden" name="subject" value="标题">'
+            '</body></html>',
+            200,
+            headers: {'content-type': 'text/html; charset=utf-8'},
+          );
+        }
+        body = Uri.splitQueryString(r.body);
+        return _xml("succeedhandle_('url', '主题删除成功', {})");
       });
       final msg = await api.deletePost(
         tid: 9, fid: 2, pid: 10, formhash: 'abc',
       );
-      expect(url, contains('delete=1'));
-      expect(url, contains('formhash=abc'));
-      expect(msg, '已删除');
+      expect(urls.first, contains('action=edit'));
+      expect(urls.last, contains('editsubmit=yes'));
+      expect(body!['delete'], '1');
+      expect(body!['formhash'], 'ef901234');
+      expect(body!['posttime'], '1790000009');
+      expect(msg, contains('删除成功'));
+    });
+
+    test('deletePost 编辑页是登录页时抛登录失效', () async {
+      final api = _api((r) => http.Response(
+            '<html><body><form action="member.php?mod=logging&amp;action=login&amp;loginsubmit=yes">'
+            '</form></body></html>',
+            200,
+          ));
+      expect(
+        () => api.deletePost(tid: 9, fid: 2, pid: 10, formhash: 'abc'),
+        throwsA(isA<ForumException>()),
+      );
     });
   });
 

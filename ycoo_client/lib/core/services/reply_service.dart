@@ -5,6 +5,7 @@ import 'dart:math';
 
 import '../automation/auto_reply_queue.dart';
 import '../automation/automation_engine.dart';
+import '../error/app_exception.dart';
 import '../storage/automation_models.dart';
 import '../storage/settings_repository.dart';
 import '../../data/forum_api.dart';
@@ -123,7 +124,14 @@ class ReplyService {
 
   /// 手动回复。
   Future<ReplyResult> manualReply(ThreadDetail d, String message) async {
-    final res = await api.reply(tid: d.tid, fid: d.fid, message: message);
+    ReplyResult res;
+    try {
+      res = await api.reply(tid: d.tid, fid: d.fid, message: message);
+    } on AppException catch (e) {
+      return ReplyResult(success: false, message: e.displayMessage);
+    } catch (_) {
+      return const ReplyResult(success: false, message: '回复失败，网络异常，请重试');
+    }
     if (res.success) {
       _repliedTids.add(d.tid);
       _bumpReplyCount();

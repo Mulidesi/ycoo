@@ -1442,8 +1442,13 @@ NewThreadResult parseNewThreadResult(String body) {
     r"""succeedhandle_\w*\s*\(\s*['"]([^'"]*)['"]""",
   ).firstMatch(body);
   if (cb != null) {
+    final url = cb.group(1)!;
     tid = int.tryParse(
-      RegExp(r'tid=(\d+)').firstMatch(cb.group(1)!)?.group(1) ?? '',
+      RegExp(r'tid=(\d+)').firstMatch(url)?.group(1) ?? '',
+    );
+    // comiis 模板的成功回调直接给 Rewrite 地址 thread-<tid>-1-1.html
+    tid ??= int.tryParse(
+      RegExp(r'thread-(\d+)-').firstMatch(url)?.group(1) ?? '',
     );
   }
   tid ??= int.tryParse(
@@ -1451,12 +1456,14 @@ NewThreadResult parseNewThreadResult(String body) {
         '',
   );
 
-  final callbackOk = RegExp(
-    r'succeedhandle_(?:newthread|post)\b',
-  ).hasMatch(body);
+  // 站点模板的 handlekey 后缀可为空（succeedhandle_('thread-…', …)）
+  final callbackOk = RegExp(r'succeedhandle_\w*\(').hasMatch(body);
   final pending = msg.contains('审核');
   final ok = callbackOk ||
-      (tid != null && (msg.contains('发布成功') || msg.contains('发表成功')));
+      (tid != null &&
+          (msg.contains('发布成功') ||
+              msg.contains('发表成功') ||
+              msg.contains('已发布')));
 
   if (ok) {
     return NewThreadResult(
