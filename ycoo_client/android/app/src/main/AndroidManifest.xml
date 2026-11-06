@@ -12,6 +12,7 @@
         android:label="源坛"
         android:name=".MainApplication"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:usesCleartextTraffic="false"
         android:requestLegacyExternalStorage="true">
         <activity

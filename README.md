@@ -240,9 +240,10 @@ flutter build web --release
 
 | 来源 | 文件 | 说明 |
 | --- | --- | --- |
-| GitHub Release | `ycoo-client-1.1.10-arm64-v8a.apk` | 当前最新（[v1.1.10](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.10)，回帖/发帖 503 表单校验失败重试 + 灌水等待重试 + 删除改表单提交 + 切站 baseUrl 同步；versionCode 31，minSdk 24） |
-| GitHub Release | `ycoo-client-1.1.10-armeabi-v7a.apk` | 同上，32 位 ARM |
-| GitHub Release | `ycoo-client-1.1.10-x86_64.apk` | 同上，x86_64 模拟器/平板 |
+| GitHub Release | `ycoo-client-1.1.11-arm64-v8a.apk` | 当前最新（[v1.1.11](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.11)，替换应用图标；versionCode 32，minSdk 24） |
+| GitHub Release | `ycoo-client-1.1.11-armeabi-v7a.apk` | 同上，32 位 ARM |
+| GitHub Release | `ycoo-client-1.1.11-x86_64.apk` | 同上，x86_64 模拟器/平板 |
+| GitHub Release | `ycoo-client-1.1.10-arm64-v8a.apk` | [v1.1.10](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.10)，回帖/发帖 503 表单校验失败重试 + 灌水等待重试 + 删除改表单提交 + 切站 baseUrl 同步；versionCode 31 |
 | GitHub Release | `ycoo-client-1.1.9-arm64-v8a.apk` | [v1.1.9](https://github.com/Mulidesi/ycoo/releases/tag/v1.1.9)（回帖「来路不正确」初步重试，未覆盖 503 场景；versionCode 30） |
 | GitHub Release | `ycoo-client-1.1.8-arm64-v8a.apk` | v1.1.8（帖子互动增强+发帖增强+离线缓存+HTML渲染器+UX细节；versionCode 29，minSdk 24） |
 | GitHub Release | `ycoo-client-1.1.8-armeabi-v7a.apk` | 同上，32 位 ARM |
