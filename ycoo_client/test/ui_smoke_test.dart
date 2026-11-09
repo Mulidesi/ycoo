@@ -74,6 +74,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('列表卡片：悬赏芯片，不显示售价', (tester) async {
+    const reward = ThreadItem(
+      tid: 164872,
+      title: '求个资源',
+      url: 'https://ycoo.net/thread-164872-1-1.html',
+      author: '甲',
+      price: 80,
+      isReward: true,
+    );
+    await _pumpAt(tester, ThreadTile(item: reward, onTap: () {}));
+    expect(find.text('悬赏 80 星币'), findsOneWidget);
+    expect(find.textContaining('售价'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('列表卡片：预览 special=3 补悬赏芯片', (tester) async {
+    const item = ThreadItem(
+      tid: 164872,
+      title: '求个资源',
+      url: 'https://ycoo.net/thread-164872-1-1.html',
+      author: '甲',
+    );
+    const preview = ThreadPreview(special: 3, price: 80);
+    await _pumpAt(tester, ThreadTile(item: item, preview: preview, onTap: () {}));
+    expect(find.text('悬赏 80 星币'), findsOneWidget);
+    expect(find.textContaining('购买'), findsNothing);
+  });
+
+  testWidgets('列表卡片：付费芯片', (tester) async {
+    const paid = ThreadItem(
+      tid: 164903,
+      title: '付费资源',
+      url: 'https://ycoo.net/thread-164903-1-1.html',
+      author: '乙',
+      price: 5,
+    );
+    await _pumpAt(tester, ThreadTile(item: paid, onTap: () {}));
+    expect(find.text('售价 5 星币'), findsOneWidget);
+    expect(find.textContaining('悬赏'), findsNothing);
+  });
+
+  testWidgets('外链点击弹出复制/打开', (tester) async {
+    await _pumpAt(
+      tester,
+      const PostContent(html: '<a href="https://example.com/path">外链示例</a>'),
+    );
+    await tester.tap(find.text('外链示例'));
+    await tester.pumpAndSettle();
+    expect(find.text('打开链接'), findsOneWidget);
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('打开'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('正文：裸链接可点、图片渲染、长文本不溢出', (tester) async {
     const html = '''
 <div>【下载地址】：</div>

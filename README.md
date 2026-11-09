@@ -86,8 +86,11 @@
   - `您需要登录才可以下载或查看` → 登录可见
 - **购买后信息栏（易踩坑）**：购买成功后站点**不会删除** `div.locked`，只是内容退化成
   `<a href="…action=viewpayments…">记录</a> 付费主题, 价格: 5 星币`，同时正文回到 `#postmessage_`。
-  判定「是否仍需购买」必须看**购买入口 `a[href*=action=pay]` 与阻塞措辞**，不能只看是否含「星币」，
-  否则买完仍会被判成锁定（v1.0.10 修复）。
+  判定「是否仍需购买」必须看**购买入口 `a[href*=action=pay]` 与阻塞措辞（购买 / 支付 / 才能浏览）**，不能只看是否含「星币 / 金币」，
+  否则买完仍会被判成锁定（v1.0.10 修复）；悬赏贴正文里的赏金金额也不会被当成购买。
+- **悬赏问答（`special=3`）不是付费主题**：列表 `span.kmbga`「悬赏 N 星币」、移动端 JSON `special=3` + `price` 为赏金。
+  游客调 `forumdisplay` 时 `message` 常套 `**** 本内容购买后可见 ****`，摘要层必须丢弃该占位，避免列表显示成「需购买」。
+  付费贴是 `special=0` 且 `price > 0`（负 `price` 当占位，不当售价）。详情页展示悬赏徽章，不走购买条。
 - **购买流程**：`GET …mod=misc&action=pay&tid&pid&infloat=yes&handlekey=pay&inajax=1` 取弹窗表单 →
   按表单 action（`…action=pay&paysubmit=yes&infloat=yes`，需补 `tid`）POST `formhash/paysubmit/handlekey/tid` →
   响应是 `succeedhandle_('…', '主题购买成功', {})`（**handlekey 为空，下划线后无字符**）。

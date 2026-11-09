@@ -46,6 +46,53 @@ String _text(Element? e) => e?.text.replaceAll('\u00a0', ' ').trim() ?? '';
 String? _attachSize(String text) =>
     RegExp(r'([\d.]+\s*[KMGT]B)').firstMatch(text)?.group(1)?.trim();
 
+/// 从帖子详情页抽悬赏标记与金额。
+///
+/// Discuz `special=3` 在 comiis 模板里常见：
+///   `<span class="kmbga kmico_xs">悬赏 <strong>80</strong> 星币</span>`
+///   标题区「悬赏」徽章 / `#reward_thread` / `.rwdbst`
+(bool, String?) _parseRewardMeta(Document doc, String html) {
+  var isReward = false;
+  String? priceText;
+
+  final badge = doc.querySelector('span.kmbga');
+  final badgeText = _text(badge);
+  if (badgeText.contains('悬赏')) {
+    isReward = true;
+    final m = RegExp(r'(\d+)\s*([^<\s]{0,8})').firstMatch(badgeText);
+    if (m != null) {
+      final unit = m.group(2)!.trim();
+      priceText = unit.isEmpty ? '${m.group(1)} 星币' : '${m.group(1)} $unit';
+    }
+  }
+
+  if (doc.querySelector('#reward_thread, .rwdbst') != null) {
+    isReward = true;
+  }
+
+  final h1 = _text(doc.querySelector('h1.ts')) + _text(doc.querySelector('#thread_subject'));
+  if (h1.contains('悬赏')) isReward = true;
+
+  if (priceText == null) {
+    final src = badge?.innerHtml ?? '';
+    final m = RegExp(r'悬赏\s*(?:<[^>]+>\s*)*(\d+)\s*([^<\s]{0,8})').firstMatch(src);
+    if (m != null) {
+      isReward = true;
+      final unit = (m.group(2) ?? '').trim();
+      priceText = unit.isEmpty ? '${m.group(1)} 星币' : '${m.group(1)} $unit';
+    }
+  }
+  if (priceText == null) {
+    final m = RegExp(r'悬赏金额[:：]?\s*(\d+)\s*([^<\s，。]{0,8})').firstMatch(html);
+    if (m != null) {
+      isReward = true;
+      final unit = (m.group(2) ?? '').trim();
+      priceText = unit.isEmpty ? '${m.group(1)} 星币' : '${m.group(1)} $unit';
+    }
+  }
+  return (isReward, priceText);
+}
+
 int _toInt(String? s) {
   if (s == null) return 0;
   final t = s.replaceAll(RegExp(r'[^\d.万亿]'), '');
@@ -176,6 +223,14 @@ ThreadPage parseThreadList(String html, {int page = 1}) {
       if (m != null) fid = int.parse(m.group(1)!);
     }
 
+    final badgeText = _text(li.querySelector('span.kmbga'));
+    final isReward = badgeText.contains('悬赏');
+    var price = 0;
+    final priceMatch = RegExp(r'(\d+)\s*星币').firstMatch(badgeText);
+    if (priceMatch != null) {
+      price = int.tryParse(priceMatch.group(1)!) ?? 0;
+    }
+
     items.add(ThreadItem(
       tid: tid,
       title: title,
@@ -190,6 +245,8 @@ ThreadPage parseThreadList(String html, {int page = 1}) {
       hasAttachment: li.querySelector('i.fico-attachment') != null,
       isSticky: id.startsWith('stickthread') || li.querySelector('.kmding') != null,
       fid: fid == 0 ? null : fid,
+      price: price,
+      isReward: isReward,
     ));
   }
 
@@ -513,7 +570,13 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
   String? payUrl;
   String? payPriceText;
   var payBuyers = 0;
+  var isReward = false;
+  String? rewardPriceText;
   final threadPoll = _parsePoll(doc);
+
+  final rewardInfo = _parseRewardMeta(doc, html);
+  isReward = rewardInfo.$1;
+  rewardPriceText = rewardInfo.$2;
 
   final postDivs = doc.querySelectorAll('div[id^="post_"]');
   for (final p in postDivs) {
@@ -568,8 +631,7 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
         if (payLink != null ||
             t.contains('购买') ||
             t.contains('支付') ||
-            t.contains('星币') ||
-            t.contains('金币')) {
+            t.contains('才能浏览')) {
           needsPurchase = true;
         }
         if (t.contains('登录')) needsLogin = true;
@@ -763,6 +825,8 @@ ThreadDetail parseThread(String html, {int tid = 0, int page = 1}) {
     followUrl: followUrl,
     followHash: followHash,
     following: following,
+    isReward: isReward,
+    rewardPriceText: rewardPriceText,
   );
 }
 

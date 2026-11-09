@@ -26,11 +26,26 @@ class ThreadPreview {
   /// 点赞数
   final int likes;
 
-  const ThreadPreview({this.image, this.excerpt, this.imageCount = 0, this.likes = 0});
+  /// Discuz `price`：付费贴为售价，悬赏贴为赏金。
+  final int price;
+
+  /// Discuz `special`：3 = 悬赏。
+  final int special;
+
+  const ThreadPreview({
+    this.image,
+    this.excerpt,
+    this.imageCount = 0,
+    this.likes = 0,
+    this.price = 0,
+    this.special = 0,
+  });
 
   bool get hasImage => image != null && image!.isNotEmpty;
   bool get hasExcerpt => excerpt != null && excerpt!.isNotEmpty;
-  bool get isEmpty => !hasImage && !hasExcerpt && likes == 0;
+  bool get isReward => special == 3;
+  bool get isPaid => !isReward && price > 0;
+  bool get isEmpty => !hasImage && !hasExcerpt && likes == 0 && price == 0 && special == 0;
 }
 
 /// 解析 `module=forumdisplay` 的 JSON → tid 映射。
@@ -74,11 +89,17 @@ Map<int, ThreadPreview> parseForumDisplayPreviews(String body) {
     final imageNumber = _int(raw['attachmentImageNumber']);
     if (imageNumber > count) count = imageNumber;
 
+    final special = _int(raw['special']);
+    final rawPrice = _int(raw['price']);
+    // 悬赏金额用绝对值；普通贴仅正数才是售价（负值常见于接口占位，不能当成付费）。
+    final price = special == 3 ? rawPrice.abs() : (rawPrice > 0 ? rawPrice : 0);
     out[tid] = ThreadPreview(
       image: image,
-      excerpt: previewText(raw['message']?.toString()),
+      excerpt: previewText(raw['message']?.toString(), special: special, price: rawPrice),
       imageCount: count,
       likes: _int(raw['recommend_add']),
+      price: price,
+      special: special,
     );
   }
   return out;
@@ -95,7 +116,11 @@ String? attachmentUrl(String? path, {bool remote = false}) {
 }
 
 /// 正文预览 → 一行摘要。
-String? previewText(String? html, {int maxLen = 110}) {
+///
+/// 移动端接口对未购付费贴返回 `**** 本内容购买后可见 ****`，
+/// 对游客不可见的悬赏贴（`special=3`）也常套同一句占位。
+/// 悬赏贴不是付费主题，这类占位不能当摘要展示。
+String? previewText(String? html, {int maxLen = 110, int special = 0, int price = 0}) {
   if (html == null || html.isEmpty) return null;
   var t = html;
   t = t.replaceAll(RegExp(r'<script[\s\S]*?</script>', caseSensitive: false), ' ');
@@ -126,8 +151,20 @@ String? previewText(String? html, {int maxLen = 110}) {
   );
   t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (t.isEmpty) return null;
+  if (_isPurchasePlaceholder(t)) {
+    // 悬赏贴（special=3）或无售价的普通贴：占位文案会误导成「需购买」
+    if (special == 3 || price <= 0) return null;
+  }
   if (t.length <= maxLen) return t;
   return '${t.substring(0, maxLen)}…';
+}
+
+bool _isPurchasePlaceholder(String t) {
+  final s = t.replaceAll('*', '').replaceAll(' ', '');
+  return s.contains('本内容购买后可见') ||
+      s.contains('当前主题内容需要付费购买') ||
+      s.contains('需要付费购买后') ||
+      s == '购买后可见';
 }
 
 int _int(Object? v) {

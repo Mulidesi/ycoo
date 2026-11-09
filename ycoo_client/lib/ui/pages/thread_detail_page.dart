@@ -366,6 +366,10 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
             d.title,
             style: YuanType.titleMd.copyWith(fontSize: 19.5, height: 1.42),
           ),
+          if (d.isReward) ...[
+            const SizedBox(height: 10),
+            _rewardBadge(d),
+          ],
           const SizedBox(height: 14),
           Row(
             children: [
@@ -1597,6 +1601,31 @@ class _ThreadDetailPageState extends State<ThreadDetailPage> {
   }
 
   // ---------------------------------------------------------------- 提示条
+
+  Widget _rewardBadge(ThreadDetail d) {
+    final semantic = YuanSemanticColors.of(context);
+    final color = semantic.brandTertiary;
+    final amount = d.rewardPriceText;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(YuanRadius.xs),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.emoji_events_outlined, size: 15, color: color),
+          const SizedBox(width: 6),
+          Text(
+            amount == null || amount.isEmpty ? '悬赏问答' : '悬赏 $amount',
+            style: YuanType.label.copyWith(color: color, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _lockedBanner(ThemeData theme, ThreadDetail d) {
     final isPurchase = d.needsPurchase;

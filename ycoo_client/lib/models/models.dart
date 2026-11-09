@@ -46,6 +46,12 @@ class ThreadItem {
   final bool isSticky;
   final int? fid;
 
+  /// 售价或悬赏金额（星币）。付费贴 `price > 0`；悬赏贴为赏金。
+  final int price;
+
+  /// Discuz `special=3` 悬赏主题。
+  final bool isReward;
+
   const ThreadItem({
     required this.tid,
     required this.title,
@@ -60,7 +66,30 @@ class ThreadItem {
     this.hasAttachment = false,
     this.isSticky = false,
     this.fid,
+    this.price = 0,
+    this.isReward = false,
   });
+
+  /// 付费主题（有售价且不是悬赏）。
+  bool get isPaid => !isReward && price > 0;
+
+  ThreadItem copyWith({int? fid, int? price, bool? isReward}) => ThreadItem(
+        tid: tid,
+        title: title,
+        url: url,
+        author: author,
+        authorId: authorId,
+        avatar: avatar,
+        replies: replies,
+        views: views,
+        timeText: timeText,
+        typeName: typeName,
+        hasAttachment: hasAttachment,
+        isSticky: isSticky,
+        fid: fid ?? this.fid,
+        price: price ?? this.price,
+        isReward: isReward ?? this.isReward,
+      );
 }
 
 class ThreadPage {
@@ -336,6 +365,12 @@ class ThreadDetail {
   /// 当前登录用户是否已关注楼主（入口为 `op=del` 时 true）。
   final bool following;
 
+  /// Discuz `special=3` 悬赏主题。
+  final bool isReward;
+
+  /// 悬赏金额文案，如 `80 星币`。
+  final String? rewardPriceText;
+
   const ThreadDetail({
     required this.tid,
     required this.fid,
@@ -357,6 +392,8 @@ class ThreadDetail {
     this.followUrl,
     this.followHash,
     this.following = false,
+    this.isReward = false,
+    this.rewardPriceText,
   });
 
   bool get hasMore => page < totalPages;

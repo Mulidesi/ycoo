@@ -36,23 +36,7 @@ class ForumApi {
     return ThreadPage(
       items: [
         for (final t in tp.items)
-          t.fid == null
-              ? ThreadItem(
-                  tid: t.tid,
-                  title: t.title,
-                  url: t.url,
-                  author: t.author,
-                  authorId: t.authorId,
-                  avatar: t.avatar,
-                  replies: t.replies,
-                  views: t.views,
-                  timeText: t.timeText,
-                  typeName: t.typeName,
-                  hasAttachment: t.hasAttachment,
-                  isSticky: t.isSticky,
-                  fid: fid,
-                )
-              : t,
+          t.fid == null ? t.copyWith(fid: fid) : t,
       ],
       page: tp.page,
       totalPages: tp.totalPages,
@@ -120,6 +104,8 @@ class ForumApi {
       followUrl: d.followUrl,
       followHash: d.followHash,
       following: d.following,
+      isReward: d.isReward,
+      rewardPriceText: d.rewardPriceText,
     );
   }
 

@@ -133,8 +133,21 @@ class ThreadTile extends StatelessWidget {
 
   Widget _title(BuildContext context, ThemeData theme) {
     final semantic = YuanSemanticColors.of(context);
+    final isReward = item.isReward || preview?.isReward == true;
+    final isPaid = !isReward && (item.isPaid || preview?.isPaid == true);
+    final amount = item.price > 0 ? item.price : (preview?.price ?? 0);
     final chips = <Widget>[
       if (item.isSticky) const TagChip(label: '置顶', color: YuanColors.brandSecondaryLight),
+      if (isReward)
+        TagChip(
+          label: amount > 0 ? '悬赏 $amount 星币' : '悬赏',
+          color: YuanColors.brandTertiaryLight,
+        )
+      else if (isPaid)
+        TagChip(
+          label: '售价 $amount 星币',
+          color: YuanColors.brandTertiaryLight,
+        ),
     ];
 
     return Column(

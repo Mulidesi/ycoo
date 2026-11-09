@@ -13,7 +13,7 @@ import 'net_image.dart';
 /// 解析逻辑放在 `data/content.dart`（纯 Dart，可离线回归），
 /// 这里只负责把内容块画出来：段落 / 图片 / 引用 / 代码 / 分隔线。
 /// 链接统一用主色 + 下划线；论坛站内链接（ycoo.net / pc.sysbbs.com）
-/// 点击直接在应用内打开帖子 / 版块，其余链接用外部浏览器、长按复制地址。
+/// 点击直接在应用内打开帖子 / 版块，其余网址弹出「复制 / 打开」再处理。
 class PostContent extends StatefulWidget {
   const PostContent({
     super.key,
@@ -553,6 +553,61 @@ class _PostContentState extends State<PostContent> {
     // 论坛站内链接：帖子 / 版块直接应用内打开，无需外部浏览器
     if (openInAppIfInternal(context, url)) return;
 
+    await _showLinkActions(url);
+  }
+
+  Future<void> _showLinkActions(String url) async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) {
+        final semantic = YuanSemanticColors.of(sheetCtx);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(YuanSpace.md, YuanSpace.xs, YuanSpace.md, YuanSpace.md),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('打开链接', style: YuanType.titleSm),
+                const SizedBox(height: YuanSpace.xs),
+                Text(
+                  url,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: YuanType.bodySm.copyWith(color: semantic.textSecondary),
+                ),
+                const SizedBox(height: YuanSpace.md),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.copy_rounded, color: semantic.brandPrimary),
+                  title: const Text('复制'),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    _copyLink(url);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.open_in_browser_rounded, color: semantic.brandPrimary),
+                  title: const Text('打开'),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    _launchExternal(url);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _launchExternal(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
     try {
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) _copyLink(url, hint: '无法打开，链接已复制');

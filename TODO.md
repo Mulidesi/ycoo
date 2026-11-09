@@ -397,6 +397,17 @@
 - P15-F 完成 = 分享为图片入口 + 渲染/保存/系统分享 + analyze 0 issue + 新增测试
 - P15-H 完成 = 回帖/发帖 503 表单校验失败重试 + 灌水等待重试 + 服务端 posttime + 删除改表单提交 + 切站 baseUrl 同步 + analyze 0 issue + 244 测试全过 + 实机闭环验证
 
+## P16 — 外链操作 / 悬赏问答（进行中）
+
+> 来源：正文网址点击后要可选复制或浏览器打开；悬赏问答列表误显示「需购买」，详情应展示悬赏标签与星币金额。
+
+- [x] 外链：`html_content` 站内仍 `openInAppIfInternal`；外链 `showModalBottomSheet` 提供复制 / 打开；视频/iframe「打开」同一路径
+- [x] 模型：`ThreadItem.price/isReward/isPaid`，`ThreadDetail.isReward/rewardPriceText`；`isPaid = !isReward && price > 0`
+- [x] 列表解析：`span.kmbga`「悬赏 / 售价 N 星币」；`ForumApi.threads` 用 `copyWith(fid:)` 补 fid
+- [x] 预览：移动端 `special/price`；`special=3` 或 `price<=0` 时丢弃「购买后可见」占位；负 `price` 不当付费售价
+- [x] UI：列表悬赏/售价芯片互斥；详情标题下 `_rewardBadge`；锁定判定不再仅因「星币/金币」判购买
+- [x] 测试 / analyze / 全量 test / 文档：`reward_thread_test` 9 例 + `ui_smoke_test` 新增 4 例；`flutter analyze` 0 issue；`flutter test` 255 全过 + 1 跳过
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过
