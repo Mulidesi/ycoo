@@ -185,4 +185,60 @@ void main() {
       expect(images['https://ycoo.net/big.png'], isNull);
     });
   });
+
+  group('页脚二维码', () {
+    testWidgets('有 URL 时页脚高度包含二维码', (tester) async {
+      final withQr = ShareRenderer().computeLayout(
+        header: header,
+        footer: footer,
+        blocks: const [ContentBlock.text([InlineRun('正文')])],
+      );
+      final withoutQr = ShareRenderer(
+        spec: const ShareImageSpec(showQrCode: false),
+      ).computeLayout(
+        header: header,
+        footer: footer,
+        blocks: const [ContentBlock.text([InlineRun('正文')])],
+      );
+      expect(withQr.height, greaterThan(withoutQr.height));
+    });
+
+    testWidgets('URL 为空时不绘制二维码', (tester) async {
+      const emptyUrlFooter = ShareFooter(
+        siteName: '源论坛',
+        threadUrl: '',
+      );
+      final layout = ShareRenderer().computeLayout(
+        header: header,
+        footer: emptyUrlFooter,
+        blocks: const [ContentBlock.text([InlineRun('正文')])],
+      );
+      expect(layout.height, greaterThan(200));
+    });
+
+    testWidgets('渲染包含二维码非白像素', (tester) async {
+      await tester.runAsync(() async {
+        final renderer = ShareRenderer(
+          spec: const ShareImageSpec(width: 400, pixelRatio: 1),
+        );
+        final image = await renderer.render(
+          header: header,
+          footer: footer,
+          blocks: const [ContentBlock.text([InlineRun('分享正文')])],
+        );
+        final bytes = await image.toByteData();
+        expect(bytes, isNotNull);
+        final list = bytes!.buffer.asUint8List();
+        var nonWhite = 0;
+        for (var i = 0; i < list.length; i += 4) {
+          final r = list[i];
+          final g = list[i + 1];
+          final b = list[i + 2];
+          if (r < 250 || g < 250 || b < 250) nonWhite++;
+        }
+        expect(nonWhite, greaterThan(0));
+        image.dispose();
+      });
+    });
+  });
 }

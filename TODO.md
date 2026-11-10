@@ -408,6 +408,17 @@
 - [x] UI：列表悬赏/售价芯片互斥；详情标题下 `_rewardBadge`；锁定判定不再仅因「星币/金币」判购买
 - [x] 测试 / analyze / 全量 test / 文档：`reward_thread_test` 9 例 + `ui_smoke_test` 新增 4 例；`flutter analyze` 0 issue；`flutter test` 255 全过 + 1 跳过
 
+## P17 — 分享图片页脚二维码（已完成）
+
+> 来源：用户反馈希望分享图片底部包含帖子链接二维码，方便扫码访问。
+
+- [x] 新增 `qr: 4.0.0` 依赖（4.0.1 需 Dart 3.13，锁定 4.0.0 兼容 3.11）
+- [x] `ShareImageSpec` 新增 `showQrCode/qrCodeSize/qrCodeGap/qrQuietZone` 字段
+- [x] `ShareRenderer._drawQrCode`：`QrCode.fromData` 生成矩阵，逐模块 `drawRect` 绘制，带 4 module 静区
+- [x] 页脚布局改为左右分栏：左侧文字（站点名 + URL），右侧二维码（120×120）
+- [x] URL 为空或 QR 生成失败时降级为纯文字页脚
+- [x] 测试：`share_renderer_test` 新增 3 例（高度、空 URL、非白像素）；`flutter analyze` 0 issue；`flutter test` 258 全过
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过

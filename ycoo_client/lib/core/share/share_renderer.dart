@@ -2,8 +2,11 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+
+import 'package:qr/qr.dart';
 
 import '../../data/content.dart';
 
@@ -17,6 +20,10 @@ class ShareImageSpec {
     this.maxHeight = 8000,
     this.maxLines = 100,
     this.padding = 48,
+    this.showQrCode = true,
+    this.qrCodeSize = 120,
+    this.qrCodeGap = 20,
+    this.qrQuietZone = 4,
   });
 
   final double width;
@@ -27,6 +34,10 @@ class ShareImageSpec {
   final double maxHeight;
   final int maxLines;
   final double padding;
+  final bool showQrCode;
+  final double qrCodeSize;
+  final double qrCodeGap;
+  final int qrQuietZone;
 }
 
 class ShareHeader {
@@ -273,43 +284,105 @@ class ShareRenderer {
       );
     }));
     y += 16;
+
+    final showQr = spec.showQrCode && footer.threadUrl.isNotEmpty;
+    final textW =
+        showQr ? contentW - spec.qrCodeSize - spec.qrCodeGap : contentW;
     final siteP = _paragraph(
       '${footer.siteName}  ·  ${footer.appName}',
       _style(13, _muted, height: 1.3),
-      contentW,
+      textW,
     );
     final urlP = _paragraph(
       footer.threadUrl,
       _style(12, _link, height: 1.3),
-      contentW,
+      textW,
     );
-    segs.add(_Seg(y, siteP.height, (c, top) {
+    final textH = siteP.height + 6 + urlP.height;
+    final footerContentH =
+        showQr ? math.max(textH, spec.qrCodeSize) : textH;
+    final textTop = y + (footerContentH - textH) / 2;
+    segs.add(_Seg(textTop, siteP.height, (c, top) {
       c.drawParagraph(siteP, ui.Offset(pad, top));
     }));
-    y += siteP.height + 6;
-    segs.add(_Seg(y, urlP.height, (c, top) {
+    segs.add(_Seg(textTop + siteP.height + 6, urlP.height, (c, top) {
       c.drawParagraph(urlP, ui.Offset(pad, top));
     }));
-    y += urlP.height + pad;
+    if (showQr) {
+      final qrX = pad + textW + spec.qrCodeGap;
+      final qrY = y + (footerContentH - spec.qrCodeSize) / 2;
+      segs.add(_Seg(qrY, spec.qrCodeSize, (c, top) {
+        _drawQrCode(c, footer.threadUrl, ui.Offset(qrX, top), spec.qrCodeSize);
+      }));
+    }
+    y += footerContentH + pad;
 
     return _Built(height: y, truncated: truncated, segments: segs);
   }
 
   double _footerHeight(ShareFooter footer, double contentW) {
+    final showQr = spec.showQrCode && footer.threadUrl.isNotEmpty;
+    final textW =
+        showQr ? contentW - spec.qrCodeSize - spec.qrCodeGap : contentW;
     final siteP = _paragraph(
       '${footer.siteName}  ·  ${footer.appName}',
       _style(13, _muted, height: 1.3),
-      contentW,
+      textW,
     );
     final urlP = _paragraph(
       footer.threadUrl,
       _style(12, _link, height: 1.3),
-      contentW,
+      textW,
     );
-    final h = 8 + 1 + 16 + siteP.height + 6 + urlP.height + spec.padding;
+    final textH = siteP.height + 6 + urlP.height;
+    final contentH = showQr ? math.max(textH, spec.qrCodeSize) : textH;
+    final h = 8 + 1 + 16 + contentH + spec.padding;
     siteP.dispose();
     urlP.dispose();
     return h;
+  }
+
+  void _drawQrCode(
+    ui.Canvas canvas,
+    String data,
+    ui.Offset origin,
+    double size,
+  ) {
+    try {
+      final qrCode = QrCode(
+        payload: QrPayload.fromString(data),
+        errorCorrectLevel: QrErrorCorrectLevel.medium,
+      );
+      final qrImage = QrImage(qrCode);
+      final moduleCount = qrImage.moduleCount;
+      final quiet = spec.qrQuietZone;
+      final totalModules = moduleCount + quiet * 2;
+      final cellSize = size / totalModules;
+
+      canvas.drawRect(
+        ui.Rect.fromLTWH(origin.dx, origin.dy, size, size),
+        ui.Paint()..color = _bg,
+      );
+
+      final darkPaint = ui.Paint()..color = _title;
+      for (var row = 0; row < moduleCount; row++) {
+        for (var col = 0; col < moduleCount; col++) {
+          if (qrImage.isDark(row, col)) {
+            canvas.drawRect(
+              ui.Rect.fromLTWH(
+                origin.dx + (col + quiet) * cellSize,
+                origin.dy + (row + quiet) * cellSize,
+                cellSize,
+                cellSize,
+              ),
+              darkPaint,
+            );
+          }
+        }
+      }
+    } catch (_) {
+      // QR generation failed, skip silently
+    }
   }
 
   _Blk? _blockSeg(

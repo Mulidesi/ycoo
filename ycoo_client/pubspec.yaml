@@ -1,7 +1,7 @@
 name: ycoo_client
 description: "源论坛 ycoo.net 多端客户端"
 publish_to: 'none'
-version: 1.1.12+33
+version: 1.1.13+34
 
 environment:
   sdk: ^3.11.0
@@ -29,6 +29,8 @@ dependencies:
   # 发帖页图片 / 附件选择
   image_picker: ^1.2.4
   file_picker: ^11.0.3
+  # 分享图片页脚二维码（4.0.1 需 Dart 3.13，锁定 4.0.0 兼容 3.11）
+  qr: 4.0.0
 
 dev_dependencies:
   flutter_test:
