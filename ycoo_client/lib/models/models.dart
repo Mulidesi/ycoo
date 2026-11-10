@@ -90,6 +90,44 @@ class ThreadItem {
         price: price ?? this.price,
         isReward: isReward ?? this.isReward,
       );
+
+  Map<String, dynamic> toJson() => {
+        'tid': tid,
+        'title': title,
+        'url': url,
+        'author': author,
+        'authorId': authorId,
+        'avatar': avatar,
+        'replies': replies,
+        'views': views,
+        'timeText': timeText,
+        'typeName': typeName,
+        'hasAttachment': hasAttachment,
+        'isSticky': isSticky,
+        'fid': fid,
+        'price': price,
+        'isReward': isReward,
+      };
+
+  factory ThreadItem.fromJson(Map<String, dynamic> json) => ThreadItem(
+        tid: (json['tid'] as num).toInt(),
+        title: json['title'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        author: json['author'] as String?,
+        authorId: json['authorId'] == null
+            ? null
+            : (json['authorId'] as num).toInt(),
+        avatar: json['avatar'] as String?,
+        replies: (json['replies'] as num?)?.toInt() ?? 0,
+        views: (json['views'] as num?)?.toInt() ?? 0,
+        timeText: json['timeText'] as String?,
+        typeName: json['typeName'] as String?,
+        hasAttachment: json['hasAttachment'] as bool? ?? false,
+        isSticky: json['isSticky'] as bool? ?? false,
+        fid: json['fid'] == null ? null : (json['fid'] as num).toInt(),
+        price: (json['price'] as num?)?.toInt() ?? 0,
+        isReward: json['isReward'] as bool? ?? false,
+      );
 }
 
 class ThreadPage {

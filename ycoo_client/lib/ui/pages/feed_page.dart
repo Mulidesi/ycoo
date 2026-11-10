@@ -151,6 +151,7 @@ class _FeedPageState extends State<FeedPage>
               showBoard: true,
               // 导读是跨版块聚合，预览统一按各版块第 1 页取
               previewPage: (_) => 1,
+              cacheKey: t.view,
             ),
         ],
       ),

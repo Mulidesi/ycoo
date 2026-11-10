@@ -419,6 +419,25 @@
 - [x] URL 为空或 QR 生成失败时降级为纯文字页脚
 - [x] 测试：`share_renderer_test` 新增 3 例（高度、空 URL、非白像素）；`flutter analyze` 0 issue；`flutter test` 258 全过
 
+## P18 — 我的页面精简（已完成）
+
+> 来源：用户反馈「我的」页面内容太多，需精简展示。
+
+- [x] 移除「社区」分区（我的帖子、关注与粉丝），资料卡片统计入口保留
+- [x] 自动功能 7 项 → 4 项：每日签到 + 自动签到开关合并；每日上限 / 清除记录移入自动化记录弹层
+- [x] 外观 4 项 → 3 项：移除 Material You 动态取色开关
+- [x] `flutter analyze` 0 issue；`flutter test` 258 全过
+
+## P19 — 首页内容缓存（已完成）
+
+> 来源：用户反馈希望增加 APP 首页内容缓存，需用户手动刷新。
+
+- [x] `ThreadItem` 新增 `toJson` / `fromJson`
+- [x] 新增 `FeedCache` 服务（`lib/core/services/feed_cache.dart`），按 view 独立存储，原子写入
+- [x] `ThreadListView` 支持 `cacheKey`：启动先读缓存展示，下拉刷新才拉取最新并写缓存
+- [x] 缓存内容顶部显示「缓存于 X 前 · 下拉刷新获取最新内容」提示条
+- [x] 测试：新增 `feed_cache_test` 4 例；`flutter analyze` 0 issue；`flutter test` 262 全过
+
 ## 完成边界
 - P3 完成 = 设计系统全站接入 + 自动化引擎纯逻辑化 + analyze 0 issue + 11 测试全过
 - P5 完成 = 付费购买 / 剪贴板识别 / 站内跳转 / 双域名切换 + analyze 0 issue + 12 测试全过

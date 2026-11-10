@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/navigation/user_nav.dart';
+import '../../core/services/feed_cache.dart';
 import '../../core/utils/content_filter.dart';
 import '../../models/models.dart';
 import '../../state/app_state.dart';
@@ -14,6 +15,8 @@ import 'thread_tile.dart';
 ///
 /// 列表本身的 HTML 不含首图与摘要，加载完成后按版块向 [PreviewStore]
 /// 拉一次移动端接口补全，卡片会在数据到达后原地补上首图。
+///
+/// 传 [cacheKey] 时启用首页缓存：启动先读缓存展示，下拉刷新才拉取最新内容。
 class ThreadListView extends StatefulWidget {
   const ThreadListView({
     super.key,
@@ -22,6 +25,7 @@ class ThreadListView extends StatefulWidget {
     this.emptyText = '这里还没有帖子',
     this.showBoard = false,
     this.previewPage,
+    this.cacheKey,
   });
 
   final Future<ThreadPage> Function(int page) loader;
@@ -33,6 +37,9 @@ class ThreadListView extends StatefulWidget {
 
   /// 预览请求用的版块页码；导读类列表跨版块，统一取第 1 页
   final int Function(int page)? previewPage;
+
+  /// 缓存键（如 newthread / hot / new / digest）；为 null 时不启用缓存
+  final String? cacheKey;
 
   @override
   State<ThreadListView> createState() => _ThreadListViewState();
@@ -47,6 +54,9 @@ class _ThreadListViewState extends State<ThreadListView>
   bool _loading = false;
   bool _initialLoading = true;
   String? _error;
+
+  FeedCacheEntry? _cacheEntry;
+  bool _fromCache = false;
 
   PreviewStore? _previews;
 
@@ -63,7 +73,11 @@ class _ThreadListViewState extends State<ThreadListView>
   void initState() {
     super.initState();
     _controller.addListener(_onScroll);
-    _load(1);
+    if (widget.cacheKey != null) {
+      _loadFromCache();
+    } else {
+      _load(1);
+    }
   }
 
   @override
@@ -80,6 +94,31 @@ class _ThreadListViewState extends State<ThreadListView>
         !_loading &&
         _page < _totalPages) {
       _load(_page + 1);
+    }
+  }
+
+  Future<void> _loadFromCache() async {
+    final key = widget.cacheKey;
+    if (key == null) return;
+    final entry = await FeedCache.instance.get(key);
+    if (!mounted) return;
+    if (entry != null && entry.items.isNotEmpty) {
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(entry.items);
+        _page = entry.page;
+        _totalPages = entry.totalPages;
+        _initialLoading = false;
+        _fromCache = true;
+        _cacheEntry = entry;
+      });
+      _previews?.request(
+        entry.items,
+        page: widget.previewPage?.call(entry.page) ?? entry.page,
+      );
+    } else {
+      _load(1);
     }
   }
 
@@ -101,7 +140,22 @@ class _ThreadListViewState extends State<ThreadListView>
         _totalPages = res.totalPages;
         _initialLoading = false;
         _error = null;
+        if (page == 1) {
+          _fromCache = false;
+          _cacheEntry = null;
+        }
       });
+      if (widget.cacheKey != null && page == 1) {
+        await FeedCache.instance.put(
+          FeedCacheEntry(
+            view: widget.cacheKey!,
+            items: List.of(_items),
+            page: res.page,
+            totalPages: res.totalPages,
+            cachedAt: DateTime.now(),
+          ),
+        );
+      }
       _previews?.request(
         res.items,
         page: widget.previewPage?.call(page) ?? page,
@@ -176,16 +230,25 @@ class _ThreadListViewState extends State<ThreadListView>
     return AnimatedBuilder(
       animation: store,
       builder: (c, _) {
+        final cacheBanner =
+            _fromCache && _cacheEntry != null ? _cacheHint() : null;
         return RefreshIndicator(
           onRefresh: () => _load(1),
           child: ListView.separated(
             controller: _controller,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(12, 10, 12, 24 + barInset),
-            itemCount: visible.length + 1 + (widget.header != null ? 1 : 0),
+            itemCount: visible.length +
+                1 +
+                (widget.header != null ? 1 : 0) +
+                (cacheBanner != null ? 1 : 0),
             separatorBuilder: (c, i) => const SizedBox(height: 10),
             itemBuilder: (c, index) {
               var i = index;
+              if (cacheBanner != null) {
+                if (i == 0) return cacheBanner;
+                i -= 1;
+              }
               if (widget.header != null) {
                 if (i == 0) return widget.header!;
                 i -= 1;
@@ -216,6 +279,40 @@ class _ThreadListViewState extends State<ThreadListView>
           ),
         );
       },
+    );
+  }
+
+  Widget _cacheHint() {
+    final diff = DateTime.now().difference(_cacheEntry!.cachedAt);
+    final String text;
+    if (diff.inMinutes < 1) {
+      text = '刚刚';
+    } else if (diff.inHours < 1) {
+      text = '${diff.inMinutes} 分钟前';
+    } else if (diff.inDays < 1) {
+      text = '${diff.inHours} 小时前';
+    } else {
+      text = '${diff.inDays} 天前';
+    }
+    final color = Theme.of(context).colorScheme.outline;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.schedule_rounded, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '缓存于 $text · 下拉刷新获取最新内容',
+              style: TextStyle(fontSize: 12, color: color),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

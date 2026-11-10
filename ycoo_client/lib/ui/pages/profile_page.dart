@@ -75,41 +75,6 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
         ),
         children: [
           _profileCard(theme, st, u),
-          if (u != null && u.uid > 0) ...[
-            const SizedBox(height: 14),
-            _sectionTitle(theme, '社区'),
-            SectionCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const _TileIcon(Icons.article_outlined, YuanColors.brandPrimaryLight),
-                    title: const Text('我的帖子', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                    subtitle: const Text('我发表的主题与回帖', style: TextStyle(fontSize: 11.5)),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const MyPostsPage()),
-                    ),
-                  ),
-                  const Divider(indent: 56),
-                  ListTile(
-                    leading: const _TileIcon(Icons.people_alt_outlined, Color(0xFF10B981)),
-                    title: const Text('关注与粉丝', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                    subtitle: Text(
-                      '关注 ${u.following ?? 0} · 粉丝 ${u.followers ?? 0}',
-                      style: const TextStyle(fontSize: 11.5),
-                    ),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => FollowListPage(uid: u.uid, username: u.username),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 14),
           _sectionTitle(theme, '离线与下载'),
           SectionCard(
@@ -153,18 +118,13 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                         : '查看签到状态与连续天数',
                     style: const TextStyle(fontSize: 11.5),
                   ),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  trailing: Switch(
+                    value: st.settings.autoSign,
+                    onChanged: (v) => st.updateSettings((s) => s.autoSign = v),
+                  ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SignPage()),
                   ),
-                ),
-                const Divider(indent: 56),
-                SwitchListTile(
-                  value: st.settings.autoSign,
-                  onChanged: (v) => st.updateSettings((s) => s.autoSign = v),
-                  secondary: const _TileIcon(Icons.event_available_rounded, YuanColors.brandSecondaryLight),
-                  title: const Text('自动签到', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                  subtitle: const Text('启动 / 回到前台时自动签到，每天一次', style: TextStyle(fontSize: 11.5)),
                 ),
                 const Divider(indent: 56),
                 SwitchListTile(
@@ -211,26 +171,6 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                   ),
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => _showAutomationLogs(context, st),
-                ),
-                const Divider(indent: 56),
-                ListTile(
-                  leading: const _TileIcon(Icons.tune_rounded, YuanColors.brandTertiaryLight),
-                  title: const Text('每日自动回复上限', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                  subtitle: Text('${st.settings.dailyReplyLimit} 条 / 天',
-                      style: const TextStyle(fontSize: 11.5)),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () => _editLimit(st),
-                ),
-                const Divider(indent: 56),
-                ListTile(
-                  leading: const _TileIcon(Icons.history_rounded, YuanColors.textTertiaryLight),
-                  title: const Text('清除自动回复记录', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                  subtitle: const Text('清空后，已回复过的帖子可能再次自动回复', style: TextStyle(fontSize: 11.5)),
-                  onTap: () async {
-                    await st.clearAutoReplyHistory();
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已清除')));
-                  },
                 ),
               ],
             ),
@@ -290,34 +230,23 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
           _sectionTitle(theme, '外观'),
           SectionCard(
             padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                SwitchListTile(
-                  value: st.settings.dynamicColor,
-                  onChanged: (v) => st.updateSettings((s) => s.dynamicColor = v),
-                  secondary: const _TileIcon(Icons.palette_outlined, Color(0xFF8B5CF6)),
-                  title: const Text('Material You 动态取色', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                  subtitle: const Text('跟随系统壁纸配色（Android 12+ 生效）', style: TextStyle(fontSize: 11.5)),
-                ),
-                RadioGroup<String>(
-                  groupValue: st.settings.themeMode,
-                  onChanged: (v) => st.setThemeMode(v ?? 'system'),
-                  child: Column(
-                    children: [
-                      for (final (mode, label, icon) in const [
-                        ('system', '跟随系统', Icons.brightness_auto_rounded),
-                        ('light', '浅色模式', Icons.light_mode_rounded),
-                        ('dark', '深色模式', Icons.dark_mode_rounded),
-                      ])
-                        RadioListTile<String>(
-                          value: mode,
-                          secondary: _TileIcon(icon, YuanColors.brandPrimaryLight),
-                          title: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+            child: RadioGroup<String>(
+              groupValue: st.settings.themeMode,
+              onChanged: (v) => st.setThemeMode(v ?? 'system'),
+              child: Column(
+                children: [
+                  for (final (mode, label, icon) in const [
+                    ('system', '跟随系统', Icons.brightness_auto_rounded),
+                    ('light', '浅色模式', Icons.light_mode_rounded),
+                    ('dark', '深色模式', Icons.dark_mode_rounded),
+                  ])
+                    RadioListTile<String>(
+                      value: mode,
+                      secondary: _TileIcon(icon, YuanColors.brandPrimaryLight),
+                      title: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -713,6 +642,35 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                   body: log.message ?? '',
                   time: log.at,
                 ),
+            const SizedBox(height: YuanSpace.lg),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _editLimit(st),
+                    icon: const Icon(Icons.tune_rounded, size: 16),
+                    label: Text(
+                      '每日上限 ${st.settings.dailyReplyLimit}',
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: YuanSpace.sm),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await st.clearAutoReplyHistory();
+                      if (!c.mounted) return;
+                      ScaffoldMessenger.of(c).showSnackBar(
+                        const SnackBar(content: Text('已清除回复记录')),
+                      );
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                    label: const Text('清除回复记录', style: TextStyle(fontSize: 12.5)),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
