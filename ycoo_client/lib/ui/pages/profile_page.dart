@@ -659,6 +659,25 @@ class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClient
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () async {
+                      final ok = await showDialog<bool>(
+                        context: c,
+                        builder: (dialogCtx) => AlertDialog(
+                          title: const Text('清除回复记录'),
+                          content:
+                              const Text('清空后，已回复过的帖子可能再次自动回复。确定继续吗？'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(dialogCtx).pop(false),
+                              child: const Text('取消'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.of(dialogCtx).pop(true),
+                              child: const Text('清除'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (ok != true) return;
                       await st.clearAutoReplyHistory();
                       if (!c.mounted) return;
                       ScaffoldMessenger.of(c).showSnackBar(

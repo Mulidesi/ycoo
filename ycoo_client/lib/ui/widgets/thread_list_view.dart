@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -58,6 +60,9 @@ class _ThreadListViewState extends State<ThreadListView>
   FeedCacheEntry? _cacheEntry;
   bool _fromCache = false;
 
+  /// 每分钟刷新缓存提示条的时间文本。
+  Timer? _cacheHintTimer;
+
   PreviewStore? _previews;
 
   @override
@@ -73,6 +78,9 @@ class _ThreadListViewState extends State<ThreadListView>
   void initState() {
     super.initState();
     _controller.addListener(_onScroll);
+    _cacheHintTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted && _fromCache) setState(() {});
+    });
     if (widget.cacheKey != null) {
       _loadFromCache();
     } else {
@@ -82,6 +90,7 @@ class _ThreadListViewState extends State<ThreadListView>
 
   @override
   void dispose() {
+    _cacheHintTimer?.cancel();
     _controller.removeListener(_onScroll);
     _controller.dispose();
     super.dispose();
@@ -146,15 +155,19 @@ class _ThreadListViewState extends State<ThreadListView>
         }
       });
       if (widget.cacheKey != null && page == 1) {
-        await FeedCache.instance.put(
-          FeedCacheEntry(
-            view: widget.cacheKey!,
-            items: List.of(_items),
-            page: res.page,
-            totalPages: res.totalPages,
-            cachedAt: DateTime.now(),
-          ),
-        );
+        try {
+          await FeedCache.instance.put(
+            FeedCacheEntry(
+              view: widget.cacheKey!,
+              items: List.of(_items),
+              page: res.page,
+              totalPages: res.totalPages,
+              cachedAt: DateTime.now(),
+            ),
+          );
+        } catch (_) {
+          // 缓存写入失败不影响已展示的数据
+        }
       }
       _previews?.request(
         res.items,

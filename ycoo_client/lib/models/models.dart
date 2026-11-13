@@ -110,22 +110,22 @@ class ThreadItem {
       };
 
   factory ThreadItem.fromJson(Map<String, dynamic> json) => ThreadItem(
-        tid: (json['tid'] as num).toInt(),
+        tid: int.tryParse(json['tid'].toString()) ?? 0,
         title: json['title'] as String? ?? '',
         url: json['url'] as String? ?? '',
         author: json['author'] as String?,
         authorId: json['authorId'] == null
             ? null
-            : (json['authorId'] as num).toInt(),
+            : int.tryParse(json['authorId'].toString()),
         avatar: json['avatar'] as String?,
-        replies: (json['replies'] as num?)?.toInt() ?? 0,
-        views: (json['views'] as num?)?.toInt() ?? 0,
+        replies: int.tryParse(json['replies'].toString()) ?? 0,
+        views: int.tryParse(json['views'].toString()) ?? 0,
         timeText: json['timeText'] as String?,
         typeName: json['typeName'] as String?,
         hasAttachment: json['hasAttachment'] as bool? ?? false,
         isSticky: json['isSticky'] as bool? ?? false,
-        fid: json['fid'] == null ? null : (json['fid'] as num).toInt(),
-        price: (json['price'] as num?)?.toInt() ?? 0,
+        fid: json['fid'] == null ? null : int.tryParse(json['fid'].toString()),
+        price: int.tryParse(json['price'].toString()) ?? 0,
         isReward: json['isReward'] as bool? ?? false,
       );
 }

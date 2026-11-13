@@ -59,6 +59,9 @@ class FeedCache {
   static final FeedCache instance = FeedCache._();
   static const _fileName = 'feed_cache.json';
 
+  /// 串行化写入，避免多个 Tab 同时刷新时 read-then-write 互相覆盖。
+  Future<void> _writeQueue = Future.value();
+
   Future<Directory> _root() async {
     final base = await getApplicationSupportDirectory();
     final dir = Directory('${base.path}/feed_cache');
@@ -100,15 +103,17 @@ class FeedCache {
     }
   }
 
-  /// 写入指定 view 的缓存。
-  Future<void> put(FeedCacheEntry entry) async {
+  /// 写入指定 view 的缓存（串行化，避免并发写互相覆盖）。
+  Future<void> put(FeedCacheEntry entry) {
+    final result = _writeQueue.then((_) => _put(entry));
+    // 失败不阻塞后续写入
+    _writeQueue = result.catchError((_) {});
+    return result;
+  }
+
+  Future<void> _put(FeedCacheEntry entry) async {
     final data = await _read();
     data[entry.view] = entry.toJson();
     await _write(data);
-  }
-
-  /// 清空所有缓存。
-  Future<void> clear() async {
-    await _write(<String, dynamic>{});
   }
 }

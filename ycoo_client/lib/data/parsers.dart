@@ -71,7 +71,8 @@ String? _attachSize(String text) =>
   }
 
   final h1 = _text(doc.querySelector('h1.ts')) + _text(doc.querySelector('#thread_subject'));
-  if (h1.contains('悬赏')) isReward = true;
+  // 标题含「悬赏 + 数字」才判定，避免「悬赏小说推荐」这类普通帖误判
+  if (!isReward && RegExp(r'悬赏\s*\d+').hasMatch(h1)) isReward = true;
 
   if (priceText == null) {
     final src = badge?.innerHtml ?? '';
